@@ -5,7 +5,7 @@
   "main": "index.js",
   "type": "module",
   "bin": {
-    "aicli": "./index.js"
+    "ai": "./index.js"
   },
   "scripts": {
     "start": "node index.js"
