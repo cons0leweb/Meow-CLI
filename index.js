@@ -37,8 +37,8 @@ const COLORS = {
 };
 
 const DIVIDER = `${COLORS.gray}${"─".repeat(60)}${COLORS.reset}`;
-const HIST_FILE = path.join(os.homedir(), ".aicli_history.json");
-const CONF_FILE = path.join(os.homedir(), ".aicli.json");
+const HIST_FILE = path.join(os.homedir(), ".meowcli_history.json");
+const CONF_FILE = path.join(os.homedir(), ".meowcli.json");
 
 const DEFAULT_CONFIG = {
   api_base: process.env.OPENAI_BASE_URL || "https://api.openai.com/v1",
@@ -124,8 +124,6 @@ async function confirm(action, detail, auto_yes=false) {
     process.stdin.once("data", d => resolve(d.toString().trim().toLowerCase() === "y"));
   });
 }
-
-// --- Tool Implementations ---
 
 function listDir(p) {
   try {
@@ -242,7 +240,7 @@ async function handleTools(msg, messages, cfg) {
 
 function printHelp(cfg) {
   console.log(`
-${COLORS.magenta}${COLORS.bold}Mewo CLI — Справка${COLORS.reset}
+${COLORS.magenta}${COLORS.bold}Meow CLI — Справка${COLORS.reset}
 ${DIVIDER}
 ${COLORS.bold}Команды:${COLORS.reset}
   /help                 Показать эту справку
@@ -307,7 +305,7 @@ function parseKv(s) {
 
 function banner() {
   console.clear();
-  console.log(`${COLORS.magenta}${COLORS.bold}   AI CLI PRO v1.0   ${COLORS.reset}`);
+  console.log(`${COLORS.magenta}${COLORS.bold}   MEOW CLI  ${COLORS.reset}`);
   console.log(`${COLORS.dim}   Интеллектуальный терминальный ассистент${COLORS.reset}`);
   console.log(DIVIDER);
 }
@@ -383,7 +381,7 @@ async function main() {
     }
 
     if (input === "/config") { console.log(JSON.stringify(cfg,null,2)); continue; }
-    if (input === "/saveconfig") { saveConfig(cfg); log.ok("Конфигурация сохранена в ~/.aicli.json"); continue; }
+    if (input === "/saveconfig") { saveConfig(cfg); log.ok("Конфигурация сохранена в ~/.meowcli.json"); continue; }
 
     if (input.startsWith("/list ")) { console.log(listDir(input.slice(6))); continue; }
     if (input.startsWith("/read ")) { console.log(readFile(input.slice(6))); continue; }
