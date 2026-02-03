@@ -1,4 +1,4 @@
-# AI CLI Pro 🤖
+# Meow CLI
 
 A powerful, stylish, and feature-rich command-line interface for interacting with OpenAI-compatible APIs (OpenAI, DeepSeek, LocalAI, vLLM, etc.).
 
