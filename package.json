@@ -1,0 +1,31 @@
+{
+  "name": "meowcli",
+  "version": "1.0.0",
+  "description": "Powerful terminal-based AI Assistant with shell execution capabilities",
+  "main": "index.js",
+  "type": "module",
+  "bin": {
+    "aicli": "./index.js"
+  },
+  "scripts": {
+    "start": "node index.js"
+  },
+  "keywords": [
+    "ai",
+    "cli",
+    "terminal",
+    "openai",
+    "assistant",
+    "automation"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "diff": "^5.1.0",
+    "marked": "^11.1.0",
+    "marked-terminal": "^6.1.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
