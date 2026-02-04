@@ -1,11 +1,4 @@
 #!/usr/bin/env node
-/**
- * Meow CLI
- *
- * A terminal-based AI assistant with file system access and shell execution capabilities.
- * Designed for developers who live in the terminal.
- */
-
 import fs from "fs";
 import path from "path";
 import os from "os";
@@ -47,6 +40,9 @@ const DEFAULT_CONFIG = {
   auto_yes: process.env.AI_AUTO_YES === "1",
   quiet: false,
   profile: "default",
+  autopilot: false,
+  autopilot_steps: 5,
+  autopilot_done_tag: "[DONE]",
   profiles: {
     default: {
       temperature: 0.2,
@@ -80,7 +76,6 @@ const TOOLS = [
   { type:"function", function:{ name:"run_shell", description:"Выполнить команду в терминале (Bash)", parameters:{ type:"object", properties:{ cmd:{type:"string"} }, required:["cmd"] } } }
 ];
 
-
 const log = {
   info: (s) => console.log(`${COLORS.cyan}ℹ ${s}${COLORS.reset}`),
   ok:   (s) => console.log(`${COLORS.green}✔ ${s}${COLORS.reset}`),
@@ -88,6 +83,35 @@ const log = {
   err:  (s) => console.log(`${COLORS.red}✖ ${s}${COLORS.reset}`),
   dim:  (s) => console.log(`${COLORS.dim}${s}${COLORS.reset}`)
 };
+
+const UI = {
+  prompt: `${COLORS.green}${COLORS.bold}meow${COLORS.reset} ${COLORS.gray}›${COLORS.reset} `,
+  spinnerFrames: ["⠋","⠙","⠹","⠸","⠼","⠴","⠦","⠧","⠇","⠏"],
+};
+
+function formatTime() {
+  return new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+}
+
+function statusLine(cfg) {
+  const auto = cfg.autopilot ? `${COLORS.magenta}AUTO${COLORS.reset}` : `${COLORS.gray}MANUAL${COLORS.reset}`;
+  return `${COLORS.dim}⏱ ${formatTime()}  |  🤖 ${cfg.model}  |  🎛 ${cfg.profile}  |  🚦 ${auto}${COLORS.reset}`;
+}
+
+let spinnerTimer = null;
+function spinnerStart(text="Думаю") {
+  let i = 0;
+  if (spinnerTimer) clearInterval(spinnerTimer);
+  spinnerTimer = setInterval(() => {
+    const frame = UI.spinnerFrames[i++ % UI.spinnerFrames.length];
+    process.stdout.write(`${COLORS.dim}${frame} ${text}...${COLORS.reset}\r`);
+  }, 80);
+}
+function spinnerStop() {
+  if (spinnerTimer) clearInterval(spinnerTimer);
+  spinnerTimer = null;
+  process.stdout.write("                \r");
+}
 
 function loadJson(file, fallback) {
   try { return fs.existsSync(file) ? JSON.parse(fs.readFileSync(file,"utf8")) : fallback; }
@@ -150,7 +174,6 @@ async function writeFile(p, content, auto_yes=false) {
     const file = path.resolve(p);
     const old = fs.existsSync(file) ? fs.readFileSync(file,"utf8") : "";
     const diff = createTwoFilesPatch(file, file, old, content, "Old", "New");
-    
     if (diff.trim() && diff.length > 100) { 
       const ok = await confirm("Запись файла", diff.slice(0, 3000), auto_yes);
       if (!ok) return "❌ Запись отменена пользователем.";
@@ -158,7 +181,6 @@ async function writeFile(p, content, auto_yes=false) {
       const ok = await confirm("Создание нового файла", file, auto_yes);
       if (!ok) return "❌ Создание отменено пользователем.";
     }
-
     fs.mkdirSync(path.dirname(file), { recursive:true });
     fs.writeFileSync(file, content, "utf8");
     return `✅ Файл записан: ${file} (${content.length} байт)`;
@@ -168,7 +190,6 @@ async function writeFile(p, content, auto_yes=false) {
 async function runShell(cmd, auto_yes=false) {
   const ok = await confirm("Запуск команды Shell", cmd, auto_yes);
   if (!ok) return "❌ Запуск отменен пользователем.";
-  
   return new Promise(resolve => {
     exec(cmd, { maxBuffer: 10*1024*1024, cwd: process.cwd() }, (err, stdout, stderr) => {
       const output = [];
@@ -182,10 +203,8 @@ async function runShell(cmd, auto_yes=false) {
 
 async function callApi(messages, cfg) {
   if (!cfg.api_key) throw new Error("API Key не установлен. Используйте /config или установите OPENAI_API_KEY.");
-  
   const profile = cfg.profiles[cfg.profile] || cfg.profiles.default;
   const url = cfg.api_base.replace(/\/+$/,"");
-  
   const payload = {
     model: cfg.model,
     messages,
@@ -193,14 +212,12 @@ async function callApi(messages, cfg) {
     tool_choice: "auto",
     temperature: profile.temperature
   };
-
   try {
     const res = await fetch(`${url}/chat/completions`, {
       method: "POST",
       headers: { "Authorization": `Bearer ${cfg.api_key}`, "Content-Type": "application/json" },
       body: JSON.stringify(payload)
     });
-
     if (!res.ok) {
       const txt = await res.text();
       throw new Error(`API Error (${res.status}): ${txt}`);
@@ -213,30 +230,23 @@ async function callApi(messages, cfg) {
 
 async function handleTools(msg, messages, cfg) {
   if (!msg.tool_calls || msg.tool_calls.length === 0) return false;
-  
-  messages.push(msg); 
-  
+  messages.push(msg);
   log.info(`Ассистент вызывает инструменты (${msg.tool_calls.length})...`);
-
   for (const call of msg.tool_calls) {
     const name = call.function.name;
     let args = {};
     try { args = JSON.parse(call.function.arguments); } catch { args = {}; }
-    
     let result = "";
     log.dim(`> ${name} ${JSON.stringify(args)}`);
-
     if (name === "list_dir") result = listDir(args.path);
     else if (name === "read_file") result = readFile(args.path);
     else if (name === "write_file") result = await writeFile(args.path, args.content, cfg.auto_yes);
     else if (name === "run_shell") result = await runShell(args.cmd, cfg.auto_yes);
     else result = `❌ Неизвестный инструмент: ${name}`;
-
     messages.push({ role:"tool", tool_call_id: call.id, content: result });
   }
-  return true; 
+  return true;
 }
-
 
 function printHelp(cfg) {
   console.log(`
@@ -262,6 +272,12 @@ ${COLORS.bold}Настройки AI:${COLORS.reset}
   /temp [0.0-2.0]       Температура генерации
   /key [sk-...]         Установить API Key
   /url [http...]        Установить Base URL
+
+${COLORS.bold}Автопилот:${COLORS.reset}
+  /autopilot on|off     Вкл/выкл автопилот
+  /autopilot steps N    Лимит шагов
+  /autopilot status     Статус автопилота
+  /auto <цель>          Запуск автопилота на цель
 
 ${COLORS.bold}Разное:${COLORS.reset}
   /export <file>        Экспорт истории в JSON
@@ -305,35 +321,75 @@ function parseKv(s) {
 
 function banner() {
   console.clear();
-  console.log(`${COLORS.magenta}${COLORS.bold}   MEOW CLI  ${COLORS.reset}`);
-  console.log(`${COLORS.dim}   Интеллектуальный терминальный ассистент${COLORS.reset}`);
+  console.log(`${COLORS.magenta}${COLORS.bold}╔══════════════════════════════╗${COLORS.reset}`);
+  console.log(`${COLORS.magenta}${COLORS.bold}║         MEOW  CLI 😺          ║${COLORS.reset}`);
+  console.log(`${COLORS.magenta}${COLORS.bold}╚══════════════════════════════╝${COLORS.reset}`);
   console.log(DIVIDER);
+}
+
+async function sendToAssistant(input, messages, cfg) {
+  messages.push({ role:"user", content: input });
+  spinnerStart("Думаю");
+  try {
+    while (true) {
+      const data = await callApi(messages, cfg);
+      const msg = data.choices[0].message;
+      const toolLoop = await handleTools(msg, messages, cfg);
+      if (!toolLoop) {
+        spinnerStop();
+        const output = renderMD(msg.content || "").trim();
+        console.log(output);
+        console.log(DIVIDER);
+        messages.push(msg);
+        return msg.content || "";
+      }
+    }
+  } catch (e) {
+    spinnerStop();
+    log.err(e.message);
+    messages.pop();
+    return "";
+  }
+}
+
+async function runAutopilot(goal, messages, cfg, force=false) {
+  let steps = 0;
+  let next = goal;
+  const maxSteps = cfg.autopilot_steps || 5;
+  while (true) {
+    const reply = await sendToAssistant(next, messages, cfg);
+    const doneTag = cfg.autopilot_done_tag || "[DONE]";
+    if (reply.includes(doneTag)) {
+      log.ok("Автопилот: задача завершена.");
+      break;
+    }
+    if (!(cfg.autopilot || force)) break;
+    steps++;
+    if (steps >= maxSteps) {
+      log.warn(`Автопилот: достигнут лимит шагов (${maxSteps}).`);
+      break;
+    }
+    next = `<AUTO> Продолжай выполнение задачи. Если всё завершено, ответь: ${doneTag}`;
+  }
 }
 
 async function main() {
   let cfg = loadConfig();
   let history = loadHistory();
-  
   if (!cfg.profiles[cfg.profile]) cfg.profile = "default";
-  
   let messages = [{ role:"system", content: cfg.profiles[cfg.profile].system }, ...history];
-
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
   banner();
-  
   if (!cfg.api_key) {
     log.warn("API Key не найден в конфиге или ENV.");
     log.info("Используйте команду /key sk-... для установки.");
   }
-
   const ask = (q) => new Promise(r => rl.question(q, r));
-
   while (true) {
-    let input = (await ask(`${COLORS.green}user>${COLORS.reset} `)).trim();
+    console.log(statusLine(cfg));
+    let input = (await ask(UI.prompt)).trim();
     if (!input) continue;
-
     input = applyAliases(input, cfg);
-
     if (input === "/exit") break;
     if (input === "/help") { printHelp(cfg); continue; }
     if (input === "/clear") { 
@@ -343,28 +399,24 @@ async function main() {
       log.ok("История очищена."); 
       continue; 
     }
-    
     if (input.startsWith("/key ")) {
       cfg.api_key = input.split(" ")[1];
       saveConfig(cfg);
       log.ok("API Key сохранен.");
       continue;
     }
-    
     if (input.startsWith("/url ")) {
       cfg.api_base = input.split(" ")[1];
       saveConfig(cfg);
       log.ok("API Base URL сохранен.");
       continue;
     }
-
     if (input.startsWith("/model ")) {
       const m = input.split(" ")[1];
       if (m) { cfg.model = m; log.ok(`Модель: ${m}`); }
       else log.info(`Текущая модель: ${cfg.model}`);
       continue;
     }
-
     if (input.startsWith("/profile")) {
       const p = input.split(" ")[1];
       if (!p) { 
@@ -379,14 +431,37 @@ async function main() {
       }
       continue;
     }
-
     if (input === "/config") { console.log(JSON.stringify(cfg,null,2)); continue; }
     if (input === "/saveconfig") { saveConfig(cfg); log.ok("Конфигурация сохранена в ~/.meowcli.json"); continue; }
-
     if (input.startsWith("/list ")) { console.log(listDir(input.slice(6))); continue; }
     if (input.startsWith("/read ")) { console.log(readFile(input.slice(6))); continue; }
     if (input.startsWith("/shell ")) { console.log(await runShell(input.slice(7), cfg.auto_yes)); continue; }
-    
+    if (input.startsWith("/autopilot")) {
+      const parts = input.split(" ");
+      const cmd = parts[1];
+      const val = parts[2];
+      if (!cmd || cmd === "status") {
+        log.info(`Автопилот: ${cfg.autopilot ? "ON" : "OFF"}, шагов: ${cfg.autopilot_steps}`);
+        continue;
+      }
+      if (cmd === "on") { cfg.autopilot = true; log.ok("Автопилот включен."); continue; }
+      if (cmd === "off") { cfg.autopilot = false; log.ok("Автопилот выключен."); continue; }
+      if (cmd === "steps" && val && !isNaN(Number(val))) {
+        cfg.autopilot_steps = Math.max(1, Number(val));
+        log.ok(`Лимит шагов: ${cfg.autopilot_steps}`);
+        continue;
+      }
+      log.err("Используй: /autopilot on|off|steps N|status");
+      continue;
+    }
+    if (input.startsWith("/auto ")) {
+      const goal = input.slice(6).trim();
+      if (!goal) { log.err("Укажи цель: /auto <цель>"); continue; }
+      await runAutopilot(goal, messages, cfg, true);
+      history = messages.filter(m => m.role !== "system");
+      saveHistory(history);
+      continue;
+    }
     if (input.startsWith("/template ")) {
       const parts = input.split(" ");
       const name = parts[1];
@@ -397,36 +472,10 @@ async function main() {
       input = text;
       log.info(`Используем шаблон:\n${text}`);
     }
-    messages.push({ role:"user", content: input });
-    process.stdout.write(COLORS.dim + "Думаю..." + COLORS.reset + "\r");
-
-    try {
-      while (true) {
-        const data = await callApi(messages, cfg);
-        const msg = data.choices[0].message;
-
-    
-        process.stdout.write("          \r");
-
-        const toolLoop = await handleTools(msg, messages, cfg);
-        
-        if (!toolLoop) {
-          const output = renderMD(msg.content || "").trim();
-          console.log(output);
-          messages.push(msg);
-          
-    
-          history = messages.filter(m => m.role !== "system");
-          saveHistory(history);
-          break;
-        }
-      }
-    } catch (e) {
-      log.err(e.message);
-      messages.pop();
-    }
+    await runAutopilot(input, messages, cfg, false);
+    history = messages.filter(m => m.role !== "system");
+    saveHistory(history);
   }
-
   rl.close();
   console.log("До свидания! 👋");
 }
