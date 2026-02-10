@@ -15,6 +15,7 @@ Designed for developers who want to pair-program with AI directly in their termi
 *   **🎭 Profiles:** Switch between personas instantly (custom assistants supported).
 *   **📌 Pins:** Save important messages with `/pin` and list them with `/pins`.
 *   **🧹 Chat Vacuum:** Auto-clean old messages with `/vacuum` settings.
+*   **↩️ Undo:** Roll back last AI file changes with `/undo [N]`.
 *   **🤖 Autopilot:** Run autonomous multi-step tasks.
 *   **🔌 Universal Compatibility:** Works with any API compatible with OpenAI `chat/completions` format.
 *   **🛡 Safe Mode:** Shows diffs and asks for confirmation before writing files or running commands.
@@ -100,14 +101,13 @@ Auto-remove old messages while keeping the newest ones.
 /vacuum        # show current settings
 ```
 
-## 🤖 Custom Assistants
+## ↩️ Undo AI Changes
 
-Custom assistants live in `~/.meowcli/data/assistents` (json/txt/md).
+Roll back last AI file edits. History is stored in `~/.meowcli/data/undo.json`.
 
 ```bash
-/assistant list
-/assistant show <name>
-/assistant new <name> temp:0.3 <system prompt>
+/undo          # undo last change
+/undo 3        # undo last 3 changes
 ```
 
 ## 🧭 Quick Commands
