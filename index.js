@@ -1119,7 +1119,7 @@ function printHelp(cfg) {
     {
       title: "📦 Other",
       items: [
-        ["/undo",              "Undo last AI file change"],
+        ["/undo [N]",         "Undo last N AI file changes"],
         ["/export <file>",     "Export history to JSON"],
         ["/import <file>",     "Import history from JSON"],
         ["/template <name>",   "Use prompt template"],
@@ -1663,12 +1663,16 @@ ${TEXT}${profile.system}${C.reset}`,
     if (input === "/config") { printConfig(cfg); continue; }
     if (input === "/saveconfig") { saveConfig(cfg); log.ok("Config saved to ~/.meowcli/data/config.json"); continue; }
 
-    if (input === "/undo") {
+    if (input.startsWith("/undo")) {
+      const parts = input.split(" ");
+      const count = parts[1] ? parseInt(parts[1], 10) : 1;
+      if (Number.isNaN(count) || count <= 0) { log.err("Usage: /undo [N]"); continue; }
       const undoState = loadUndoState();
-      const last = undoState.pop();
-      if (!last) {
-        log.warn("No changes to undo.");
-      } else {
+      if (undoState.length == 0) { log.warn("No changes to undo."); continue; }
+      const undoCount = Math.min(count, undoState.length);
+      for (let i = 0; i < undoCount; i++) {
+        const last = undoState.pop();
+        if (!last) break;
         try {
           if (!last.existed) {
             if (fs.existsSync(last.path)) fs.unlinkSync(last.path);
@@ -1681,8 +1685,8 @@ ${TEXT}${profile.system}${C.reset}`,
         } catch (e) {
           log.err(`Undo failed: ${e.message}`);
         }
-        saveUndoState(undoState);
       }
+      saveUndoState(undoState);
       continue;
     }
 
