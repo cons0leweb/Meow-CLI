@@ -214,6 +214,7 @@ const DEFAULT_CONFIG = {
   auto_yes: process.env.AI_AUTO_YES === "1",
   quiet: false,
   profile: "default",
+  lang: process.env.AI_LANG || "ru",
   autopilot: {
     max_iterations: 50,
     max_errors: 5,
@@ -253,6 +254,116 @@ const DEFAULT_CONFIG = {
     "explain": "Объясни, что делает этот код: {context}."
   }
 };
+
+const I18N = {
+  ru: {
+    banner_subtitle: "Terminal AI Assistant",
+    api_key_missing_title: "API Key not found",
+    api_key_missing_hint: "Use /key sk-... to set it.",
+    type_help: "Type /help for commands",
+    help_title_chat: "💬 Chat",
+    help_title_autopilot: "🤖 Autopilot",
+    help_title_images: "🖼  Images",
+    help_title_tools: "🔧 Tools",
+    help_title_settings: "⚙️  Settings",
+    help_title_other: "📦 Other",
+    cmd_clear: "Clear current chat context",
+    cmd_chat_list: "List all chats",
+    cmd_chat_new: "Create new chat",
+    cmd_chat_use: "Switch to chat",
+    cmd_chat_delete: "Delete chat",
+    cmd_autopilot: "Start autopilot with a task",
+    cmd_autopilot_short: "Short alias for autopilot",
+    cmd_ap_config: "Show autopilot settings",
+    cmd_ap_limit: "Set max iterations (default 50)",
+    cmd_ap_errors: "Set max errors (default 5)",
+    cmd_trigger: "Run command on autopilot completion",
+    cmd_ctrl_c: "Stop autopilot gracefully",
+    cmd_img_path: "Send image with optional question",
+    cmd_img_url: "Send image by URL",
+    cmd_img_inline: "Inline image in message",
+    cmd_list: "List directory contents",
+    cmd_read: "Read file contents",
+    cmd_shell: "Execute shell command",
+    cmd_model: "Change model",
+    cmd_profile: "Change profile",
+    cmd_assistant: "List/create/use custom assistants",
+    cmd_temp: "Set temperature",
+    cmd_key: "Set API key",
+    cmd_url: "Set base URL",
+    cmd_config: "Show current config",
+    cmd_undo: "Undo last N AI file changes",
+    cmd_export: "Export history to JSON",
+    cmd_import: "Import history from JSON",
+    cmd_template: "Use prompt template",
+    cmd_pins: "List pinned messages",
+    cmd_pin: "Pin last or specific message",
+    cmd_vacuum: "Configure chat vacuum",
+    cmd_alias: "Show aliases",
+    cmd_stats: "Show status",
+    cmd_help: "This help",
+    cmd_exit: "Quit",
+    stats_title: "◆ Status",
+    tips_title: "✨ Tips",
+    tips_body: `• /help — help\n• /pin — save useful reply\n• /vacuum on drop:4 keep:1 — auto cleanup`,
+  },
+  en: {
+    banner_subtitle: "Terminal AI Assistant",
+    api_key_missing_title: "API Key not found",
+    api_key_missing_hint: "Use /key sk-... to set it.",
+    type_help: "Type /help for commands",
+    help_title_chat: "💬 Chat",
+    help_title_autopilot: "🤖 Autopilot",
+    help_title_images: "🖼  Images",
+    help_title_tools: "🔧 Tools",
+    help_title_settings: "⚙️  Settings",
+    help_title_other: "📦 Other",
+    cmd_clear: "Clear current chat context",
+    cmd_chat_list: "List all chats",
+    cmd_chat_new: "Create new chat",
+    cmd_chat_use: "Switch to chat",
+    cmd_chat_delete: "Delete chat",
+    cmd_autopilot: "Start autopilot with a task",
+    cmd_autopilot_short: "Short alias for autopilot",
+    cmd_ap_config: "Show autopilot settings",
+    cmd_ap_limit: "Set max iterations (default 50)",
+    cmd_ap_errors: "Set max errors (default 5)",
+    cmd_trigger: "Run command on autopilot completion",
+    cmd_ctrl_c: "Stop autopilot gracefully",
+    cmd_img_path: "Send image with optional question",
+    cmd_img_url: "Send image by URL",
+    cmd_img_inline: "Inline image in message",
+    cmd_list: "List directory contents",
+    cmd_read: "Read file contents",
+    cmd_shell: "Execute shell command",
+    cmd_model: "Change model",
+    cmd_profile: "Change profile",
+    cmd_assistant: "List/create/use custom assistants",
+    cmd_temp: "Set temperature",
+    cmd_key: "Set API key",
+    cmd_url: "Set base URL",
+    cmd_config: "Show current config",
+    cmd_undo: "Undo last N AI file changes",
+    cmd_export: "Export history to JSON",
+    cmd_import: "Import history from JSON",
+    cmd_template: "Use prompt template",
+    cmd_pins: "List pinned messages",
+    cmd_pin: "Pin last or specific message",
+    cmd_vacuum: "Configure chat vacuum",
+    cmd_alias: "Show aliases",
+    cmd_stats: "Show status",
+    cmd_help: "This help",
+    cmd_exit: "Quit",
+    stats_title: "◆ Status",
+    tips_title: "✨ Tips",
+    tips_body: `• /help — help\n• /pin — save useful reply\n• /vacuum on drop:4 keep:1 — auto cleanup`,
+  }
+};
+
+function t(cfg, key, fallback = "") {
+  const lang = cfg?.lang || "ru";
+  return (I18N[lang] && I18N[lang][key]) || I18N.ru[key] || fallback || key;
+}
 
 const TOOLS = [
   { type:"function", function:{ name:"list_dir", description:"Получить список файлов в директории", parameters:{ type:"object", properties:{ path:{type:"string"} }, required:["path"] } } },
@@ -1038,7 +1149,7 @@ const logo = [
 ];
   logo.forEach(l => console.log(l));
   console.log("");
-  console.log(`  ${MUTED}Terminal AI Assistant${C.reset}`);
+  console.log(`  ${MUTED}${t(cfg, "banner_subtitle")}${C.reset}`);
   console.log("");
 
   const items = [
@@ -1054,10 +1165,10 @@ const logo = [
 
   if (!cfg.api_key) {
     console.log("");
-    console.log(box(`${WARNING}${C.bold}API Key not found${C.reset}
-${TEXT_DIM}Use /key sk-... to set it.${C.reset}`, { title: "⚠ SETUP", color: WARNING, width: Math.min(COLS - 2, 60) }));
+    console.log(box(`${WARNING}${C.bold}${t(cfg, "api_key_missing_title")}${C.reset}
+${TEXT_DIM}${t(cfg, "api_key_missing_hint")}${C.reset}`, { title: "⚠ SETUP", color: WARNING, width: Math.min(COLS - 2, 60) }));
   }
-  console.log(`  ${MUTED}Type /help for commands${C.reset}`);
+  console.log(`  ${MUTED}${t(cfg, "type_help")}${C.reset}`);
   console.log("");
 }
 
@@ -1067,69 +1178,70 @@ function printHelp(cfg) {
   console.log("");
   const sections = [
     {
-      title: "💬 Chat",
+      title: t(cfg, "help_title_chat"),
       items: [
-        ["/clear",             "Clear current chat context"],
-        ["/chat list",         "List all chats"],
-        ["/chat new [name]",   "Create new chat"],
-        ["/chat use <name>",   "Switch to chat"],
-        ["/chat delete <name>","Delete chat"],
+        ["/clear",             t(cfg, "cmd_clear")],
+        ["/chat list",         t(cfg, "cmd_chat_list")],
+        ["/chat new [name]",   t(cfg, "cmd_chat_new")],
+        ["/chat use <name>",   t(cfg, "cmd_chat_use")],
+        ["/chat delete <name>",t(cfg, "cmd_chat_delete")],
       ]
     },
     {
-      title: "🤖 Autopilot",
+      title: t(cfg, "help_title_autopilot"),
       items: [
-        ["/autopilot <task>",       "Start autopilot with a task"],
-        ["/ap <task>",              "Short alias for autopilot"],
-        ["/ap-config",              "Show autopilot settings"],
-        ["/ap-limit <N>",           "Set max iterations (default 50)"],
-        ["/ap-errors <N>",          "Set max errors (default 5)"],
-        ["/trigger <cmd|off>",      "Run command on autopilot completion"],
-        ["Ctrl+C",                  "Stop autopilot gracefully"],
+        ["/autopilot <task>",       t(cfg, "cmd_autopilot")],
+        ["/ap <task>",              t(cfg, "cmd_autopilot_short")],
+        ["/ap-config",              t(cfg, "cmd_ap_config")],
+        ["/ap-limit <N>",           t(cfg, "cmd_ap_limit")],
+        ["/ap-errors <N>",          t(cfg, "cmd_ap_errors")],
+        ["/trigger <cmd|off>",      t(cfg, "cmd_trigger")],
+        ["Ctrl+C",                  t(cfg, "cmd_ctrl_c")],
       ]
     },
     {
-      title: "🖼  Images",
+      title: t(cfg, "help_title_images"),
       items: [
-        ["/img <path> [text]",       "Send image with optional question"],
-        ["/img <url> [text]",        "Send image by URL"],
-        ["{img:path} text",          "Inline image in message"],
+        ["/img <path> [text]",       t(cfg, "cmd_img_path")],
+        ["/img <url> [text]",        t(cfg, "cmd_img_url")],
+        ["{img:path} text",          t(cfg, "cmd_img_inline")],
       ]
     },
     {
-      title: "🔧 Tools",
+      title: t(cfg, "help_title_tools"),
       items: [
-        ["/list <path>",  "List directory contents"],
-        ["/read <file>",  "Read file contents"],
-        ["/shell <cmd>",  "Execute shell command"],
+        ["/list <path>",  t(cfg, "cmd_list")],
+        ["/read <file>",  t(cfg, "cmd_read")],
+        ["/shell <cmd>",  t(cfg, "cmd_shell")],
       ]
     },
     {
-      title: "⚙️  Settings",
+      title: t(cfg, "help_title_settings"),
       items: [
-        ["/model [name]",    `Change model ${MUTED}(${cfg.model})${C.reset}`],
-        ["/profile [name]",  `Change profile ${MUTED}(${cfg.profile})${C.reset}`],
-        ["/assistant <cmd>",  "List/create/use custom assistants"],
-        ["/temp [0.0-2.0]",  `Set temperature`],
-        ["/key [sk-...]",    "Set API key"],
-        ["/url [http...]",   "Set base URL"],
-        ["/config",          "Show current config"],
+        ["/model [name]",    `${t(cfg, "cmd_model")} ${MUTED}(${cfg.model})${C.reset}`],
+        ["/profile [name]",  `${t(cfg, "cmd_profile")} ${MUTED}(${cfg.profile})${C.reset}`],
+        ["/assistant <cmd>",  t(cfg, "cmd_assistant")],
+        ["/temp [0.0-2.0]",  t(cfg, "cmd_temp")],
+        ["/key [sk-...]",    t(cfg, "cmd_key")],
+        ["/url [http...]",   t(cfg, "cmd_url")],
+        ["/config",          t(cfg, "cmd_config")],
+        ["/lang <ru|en>",     "Switch UI language"],
       ]
     },
     {
-      title: "📦 Other",
+      title: t(cfg, "help_title_other"),
       items: [
-        ["/undo [N]",         "Undo last N AI file changes"],
-        ["/export <file>",     "Export history to JSON"],
-        ["/import <file>",     "Import history from JSON"],
-        ["/template <name>",   "Use prompt template"],
-        ["/pins",            "List pinned messages"],
-        ["/pin [index]",      "Pin last or specific message"],
-        ["/vacuum [opts]",     "Configure chat vacuum"],
-        ["/alias",             "Show aliases"],
-        ["/stats",             "Show status"],
-        ["/help",              "This help"],
-        ["/exit",              "Quit"],
+        ["/undo [N]",         t(cfg, "cmd_undo")],
+        ["/export <file>",     t(cfg, "cmd_export")],
+        ["/import <file>",     t(cfg, "cmd_import")],
+        ["/template <name>",   t(cfg, "cmd_template")],
+        ["/pins",            t(cfg, "cmd_pins")],
+        ["/pin [index]",      t(cfg, "cmd_pin")],
+        ["/vacuum [opts]",     t(cfg, "cmd_vacuum")],
+        ["/alias",             t(cfg, "cmd_alias")],
+        ["/stats",             t(cfg, "cmd_stats")],
+        ["/help",              t(cfg, "cmd_help")],
+        ["/exit",              t(cfg, "cmd_exit")],
       ]
     }
   ];
@@ -1168,7 +1280,7 @@ function printStats(cfg, currentChat, historyLen, pinsCount = 0) {
     ["Pins",        `${TEXT}${pinsCount}${C.reset}`],
     ["CWD",         `${MUTED}${process.cwd()}${C.reset}`],
   ];
-  console.log(`  ${ACCENT}${C.bold}◆ Status${C.reset}`);
+  console.log(`  ${ACCENT}${C.bold}${t(cfg, "stats_title")}${C.reset}`);
   console.log(`  ${MUTED}${"─".repeat(45)}${C.reset}`);
   for (const [label, value] of rows) console.log(`  ${TEXT_DIM}${label.padEnd(14)}${C.reset}${value}`);
   console.log(`  ${MUTED}${"─".repeat(45)}${C.reset}`);
@@ -1296,10 +1408,8 @@ async function main() {
   const ask = (q) => new Promise(r => rl.question(q, r));
 
   console.log(box(`
-${TEXT}Quick tips:${C.reset}
-${TEXT_DIM}• /help — help
-• /pin — save useful reply
-• /vacuum on drop:4 keep:1 — auto cleanup${C.reset}`, { title: "✨ Tips", color: ACCENT3, width: Math.min(COLS - 2, 60) }));
+${TEXT}${t(cfg, "tips_title").replace("✨ ", "")}:
+${TEXT_DIM}${t(cfg, "tips_body")}${C.reset}`, { title: t(cfg, "tips_title"), color: ACCENT3, width: Math.min(COLS - 2, 60) }));
 
   while (true) {
     let input;
@@ -1616,6 +1726,17 @@ ${TEXT}${profile.system}${C.reset}`,
     if (input.startsWith("/url ")) {
       cfg.api_base = input.split(" ")[1]; saveConfig(cfg);
       log.ok(`API Base: ${cfg.api_base}`);
+      continue;
+    }
+
+    // ── Language ──
+    if (input.startsWith("/lang")) {
+      const lang = input.split(" ")[1];
+      if (!lang) { log.info(`Language: ${cfg.lang}`); continue; }
+      if (!I18N[lang]) { log.err("Supported: ru, en"); continue; }
+      cfg.lang = lang; saveConfig(cfg);
+      log.ok(`Language → ${lang}`);
+      banner(cfg, currentChat, history.length, loadPins().length);
       continue;
     }
 
