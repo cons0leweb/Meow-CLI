@@ -10,9 +10,12 @@ Designed for developers who want to pair-program with AI directly in their termi
 ## ✨ Features
 
 *   **🛠 Auto-Tools:** The AI can read, write, list files, and execute shell commands (with your confirmation).
-*   **🎨 Markdown Rendering:** Beautiful syntax highlighting and formatting right in the terminal.
+*   **🎨 Markdown Rendering:** Beautiful formatting right in the terminal.
 *   **💾 Context & History:** Persistent chat history (saved locally).
-*   **🎭 Profiles:** Switch between "Coder", "Writer", or "Analyst" personas instantly.
+*   **🎭 Profiles:** Switch between personas instantly (custom assistants supported).
+*   **📌 Pins:** Save important messages with `/pin` and list them with `/pins`.
+*   **🧹 Chat Vacuum:** Auto-clean old messages with `/vacuum` settings.
+*   **🤖 Autopilot:** Run autonomous multi-step tasks.
 *   **🔌 Universal Compatibility:** Works with any API compatible with OpenAI `chat/completions` format.
 *   **🛡 Safe Mode:** Shows diffs and asks for confirmation before writing files or running commands.
 
@@ -39,17 +42,70 @@ Designed for developers who want to pair-program with AI directly in their termi
 
 On the first run, the tool will ask for your **API Key** and **Base URL**.
 
-Configuration is stored in `~/.mewocli.json`. You can edit it manually to add custom profiles or system prompts.
+Configuration is stored in `~/.meowcli/data/config.json`.
 
 ### Example Config Structure
 ```json
 {
   "api_key": "sk-...",
-  "base_url": "https://api.openai.com/v1",
+  "api_base": "https://api.openai.com/v1",
+  "model": "gpt-4o",
+  "profile": "default",
+  "vacuum": {
+    "enabled": true,
+    "drop_count": 4,
+    "keep_last": 1
+  },
   "profiles": {
     "default": {
-      "model": "gpt-4o",
-      "temperature": 0.7
+      "temperature": 0.2,
+      "system": "Ты — опытный инженер-программист..."
     }
   }
 }
+```
+
+## 📌 Pins
+
+Save important replies for later.
+
+```bash
+/pin          # pin last message
+/pin 3        # pin message #3
+/pins         # list pins
+```
+
+Pins are stored in `~/.meowcli/data/pins.json`.
+
+## 🧹 Chat Vacuum (auto-clean)
+
+Auto-remove old messages while keeping the newest ones.
+
+```bash
+/vacuum on drop:4 keep:1
+/vacuum off
+/vacuum        # show current settings
+```
+
+## 🤖 Custom Assistants
+
+Custom assistants live in `~/.meowcli/data/assistents` (json/txt/md).
+
+```bash
+/assistant list
+/assistant show <name>
+/assistant new <name> temp:0.3 <system prompt>
+```
+
+## 🧭 Quick Commands
+
+```bash
+/help
+/model gpt-4o
+/profile creative
+/autopilot <task>
+```
+
+## 📄 License
+
+MIT
