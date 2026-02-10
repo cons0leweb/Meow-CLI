@@ -4,7 +4,7 @@ A powerful, stylish, and feature-rich command-line interface for interacting wit
 
 Designed for developers who want to pair-program with AI directly in their terminal, with access to local filesystem tools.
 
-![License](https://img.shields.io/badge/license-MIT-blue.svg)
+![License](https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-blue.svg)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-green.svg)
 
 ## ✨ Features
@@ -110,6 +110,10 @@ Roll back last AI file edits. History is stored in `~/.meowcli/data/undo.json`.
 /undo 3        # undo last 3 changes
 ```
 
+## ⚖️ License
+
+PolyForm Noncommercial License 1.0.0. See [LICENSE](LICENSE).
+
 ## 🧭 Quick Commands
 
 ```bash
@@ -118,7 +122,3 @@ Roll back last AI file edits. History is stored in `~/.meowcli/data/undo.json`.
 /profile creative
 /autopilot <task>
 ```
-
-## 📄 License
-
-MIT
