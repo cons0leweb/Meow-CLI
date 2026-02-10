@@ -196,8 +196,16 @@ const log = {
 
 // ─── Config & State ─────────────────────────────────────────────────────────
 
-const HIST_FILE = path.join(os.homedir(), ".meowcli_history.json");
-const CONF_FILE = path.join(os.homedir(), ".meowcli.json");
+const DATA_DIR = path.join(os.homedir(), ".meowcli", "data");
+const HIST_FILE = path.join(DATA_DIR, "history.json");
+const CONF_FILE = path.join(DATA_DIR, "config.json");
+const LOG_DIR = path.join(DATA_DIR, "logs");
+const UNDO_FILE = path.join(DATA_DIR, "undo.json");
+const ASSIST_DIR = path.join(DATA_DIR, "assistents");
+const PIN_FILE = path.join(DATA_DIR, "pins.json");
+const LEGACY_HIST_FILE = path.join(os.homedir(), ".meowcli_history.json");
+const LEGACY_CONF_FILE = path.join(os.homedir(), ".meowcli.json");
+const LEGACY_LOG_DIR = path.join(os.homedir(), ".meowcli_logs");
 
 const DEFAULT_CONFIG = {
   api_base: process.env.OPENAI_BASE_URL || "https://api.openai.com/v1",
@@ -212,6 +220,11 @@ const DEFAULT_CONFIG = {
     retry_delay_ms: 2000,
     save_log: true,
     trigger_cmd: "",
+  },
+  vacuum: {
+    enabled: true,
+    keep_last: 1,
+    drop_count: 4
   },
   profiles: {
     default: {
@@ -314,22 +327,91 @@ function loadJson(file, fallback) {
 }
 
 function saveJson(file, data) {
-  try { fs.writeFileSync(file, JSON.stringify(data, null, 2)); }
+  try {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, JSON.stringify(data, null, 2));
+  }
   catch (e) { log.err(`Save error: ${e.message}`); }
+}
+
+function normalizeAssistantProfile(name, data) {
+  if (!name || !data) return null;
+  let system = "";
+  let temperature = DEFAULT_CONFIG.profiles.default.temperature;
+  if (typeof data === "string") {
+    system = data;
+  } else if (typeof data === "object") {
+    system = data.system || data.prompt || "";
+    if (typeof data.temperature === "number" && !Number.isNaN(data.temperature)) {
+      temperature = data.temperature;
+    }
+  }
+  if (!system) return null;
+  return { name, profile: { system, temperature } };
+}
+
+function loadAssistentsFromDir() {
+  const profiles = {};
+  try { fs.mkdirSync(ASSIST_DIR, { recursive: true }); } catch {}
+  if (!fs.existsSync(ASSIST_DIR)) return profiles;
+  let files = [];
+  try { files = fs.readdirSync(ASSIST_DIR); } catch { return profiles; }
+  for (const file of files) {
+    const full = path.join(ASSIST_DIR, file);
+    let stat;
+    try { stat = fs.statSync(full); } catch { continue; }
+    if (!stat.isFile()) continue;
+    const ext = path.extname(file).toLowerCase();
+    const base = path.basename(file, ext);
+    try {
+      if (ext === ".json") {
+        const data = JSON.parse(fs.readFileSync(full, "utf8"));
+        const name = data.name || base;
+        const normalized = normalizeAssistantProfile(name, data);
+        if (normalized) profiles[normalized.name] = normalized.profile;
+      } else if (ext === ".txt" || ext === ".md") {
+        const system = fs.readFileSync(full, "utf8").trim();
+        const normalized = normalizeAssistantProfile(base, system);
+        if (normalized) profiles[normalized.name] = normalized.profile;
+      }
+    } catch {
+      continue;
+    }
+  }
+  return profiles;
+}
+
+function saveAssistantProfile(name, system, temperature) {
+  if (!name || !system) throw new Error("Name and system required");
+  fs.mkdirSync(ASSIST_DIR, { recursive: true });
+  const safeName = name.replace(/[^a-zA-Z0-9._-]/g, "-");
+  const file = path.join(ASSIST_DIR, `${safeName}.json`);
+  const data = { name, system, temperature };
+  fs.writeFileSync(file, JSON.stringify(data, null, 2), "utf8");
+  return file;
 }
 
 function loadConfig() {
   const cfg = loadJson(CONF_FILE, DEFAULT_CONFIG);
+  const assistentProfiles = loadAssistentsFromDir();
   return {
     ...DEFAULT_CONFIG, ...cfg,
     autopilot: { ...DEFAULT_CONFIG.autopilot, ...(cfg.autopilot || {}) },
-    profiles:  { ...DEFAULT_CONFIG.profiles,  ...(cfg.profiles  || {}) },
+    vacuum: { ...DEFAULT_CONFIG.vacuum, ...(cfg.vacuum || {}) },
+    profiles:  { ...DEFAULT_CONFIG.profiles,  ...(cfg.profiles  || {}), ...assistentProfiles },
     templates: { ...DEFAULT_CONFIG.templates, ...(cfg.templates || {}) },
     aliases:   { ...DEFAULT_CONFIG.aliases,   ...(cfg.aliases   || {}) }
   };
 }
 
-function saveConfig(cfg) { saveJson(CONF_FILE, cfg); }
+function saveConfig(cfg) {
+  const assistentProfiles = loadAssistentsFromDir();
+  const cleanedProfiles = { ...cfg.profiles };
+  for (const name of Object.keys(assistentProfiles)) {
+    delete cleanedProfiles[name];
+  }
+  saveJson(CONF_FILE, { ...cfg, profiles: cleanedProfiles });
+}
 
 function loadHistoryState() {
   const fallback = { current: "default", chats: { default: [] } };
@@ -344,7 +426,66 @@ function loadHistoryState() {
   return fallback;
 }
 
+function loadPins() {
+  return loadJson(PIN_FILE, []);
+}
+
+function savePins(pins) {
+  saveJson(PIN_FILE, pins || []);
+}
+
+function applyVacuum(history, cfg) {
+  const vac = cfg.vacuum || {};
+  if (!vac.enabled) return history;
+  const keepLast = Math.max(0, parseInt(vac.keep_last ?? 1));
+  const dropCount = Math.max(0, parseInt(vac.drop_count ?? 4));
+  if (dropCount <= 0) return history;
+  if (history.length <= keepLast + dropCount) return history;
+  const keepTail = keepLast > 0 ? history.slice(-keepLast) : [];
+  const head = history.slice(0, Math.max(0, history.length - keepLast - dropCount));
+  return [...head, ...keepTail];
+}
+
 function saveHistoryState(state) { saveJson(HIST_FILE, state); }
+
+function loadUndoState() {
+  return loadJson(UNDO_FILE, []);
+}
+
+function saveUndoState(state) {
+  saveJson(UNDO_FILE, state);
+}
+
+function migrateLegacyData() {
+  try {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+
+    if (!fs.existsSync(CONF_FILE) && fs.existsSync(LEGACY_CONF_FILE)) {
+      fs.renameSync(LEGACY_CONF_FILE, CONF_FILE);
+    }
+
+    if (!fs.existsSync(HIST_FILE) && fs.existsSync(LEGACY_HIST_FILE)) {
+      fs.renameSync(LEGACY_HIST_FILE, HIST_FILE);
+    }
+
+    if (fs.existsSync(LEGACY_LOG_DIR) && fs.statSync(LEGACY_LOG_DIR).isDirectory()) {
+      fs.mkdirSync(LOG_DIR, { recursive: true });
+      const entries = fs.readdirSync(LEGACY_LOG_DIR);
+      for (const entry of entries) {
+        const from = path.join(LEGACY_LOG_DIR, entry);
+        const to = path.join(LOG_DIR, entry);
+        if (!fs.existsSync(to)) {
+          fs.renameSync(from, to);
+        }
+      }
+      if (fs.readdirSync(LEGACY_LOG_DIR).length === 0) {
+        fs.rmdirSync(LEGACY_LOG_DIR);
+      }
+    }
+  } catch (e) {
+    log.dim(`Legacy data migration skipped: ${e.message}`);
+  }
+}
 
 // ─── Markdown Renderer ─────────────────────────────────────────────────────
 
@@ -408,7 +549,8 @@ function readFile(p) {
 async function writeFile(p, content, auto_yes = false) {
   try {
     const file = path.resolve(p);
-    const old = fs.existsSync(file) ? fs.readFileSync(file, "utf8") : "";
+    const existed = fs.existsSync(file);
+    const old = existed ? fs.readFileSync(file, "utf8") : "";
     const diff = createTwoFilesPatch(file, file, old, content, "Old", "New");
     if (diff.trim() && diff.length > 100) {
       const ok = await confirm("Write file: " + file, diff.slice(0, 3000), auto_yes);
@@ -417,6 +559,14 @@ async function writeFile(p, content, auto_yes = false) {
       const ok = await confirm("Create new file", file, auto_yes);
       if (!ok) return "❌ Creation cancelled.";
     }
+    const undoState = loadUndoState();
+    undoState.push({
+      path: file,
+      existed,
+      content: old,
+      time: Date.now()
+    });
+    saveUndoState(undoState);
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(file, content, "utf8");
     return `✅ Written: ${file} (${content.length} bytes)`;
@@ -673,10 +823,9 @@ class Autopilot {
   _saveLogFile() {
     if (!this.saveLog || this.logEntries.length === 0) return;
     try {
-      const logDir = path.join(os.homedir(), ".meowcli_logs");
-      fs.mkdirSync(logDir, { recursive: true });
+      fs.mkdirSync(LOG_DIR, { recursive: true });
       const ts = new Date().toISOString().replace(/[:.]/g, "-");
-      const logFile = path.join(logDir, `autopilot-${ts}.json`);
+      const logFile = path.join(LOG_DIR, `autopilot-${ts}.json`);
       const logData = {
         startTime: new Date(this.startTime).toISOString(),
         endTime: new Date().toISOString(),
@@ -879,14 +1028,16 @@ class Autopilot {
 
 // ─── Banner ─────────────────────────────────────────────────────────────────
 
-function banner(cfg, currentChat, historyLen) {
+function banner(cfg, currentChat, historyLen, pinsCount = 0) {
   console.clear();
-  const logo = [
-    `${ACCENT}${C.bold}  ╔╦╗╔═╗╔═╗╦ ╦  ╔═╗╦  ╦${C.reset}`,
-    `${ACCENT2}${C.bold}  ║║║║╣ ║ ║║║║  ║  ║  ║${C.reset}`,
-    `${ACCENT3}${C.bold}  ╩ ╩╚═╝╚═╝╚╩╝  ╚═╝╩═╝╩${C.reset}`,
-  ];
+const logo = [
+    `${ACCENT}${C.bold}  __  __                   ___ _    ___ ${C.reset}`,
+    `${ACCENT2}${C.bold} |  \\/  |___ _____ __ __  / __| |  |_ _|${C.reset}`,
+    `${ACCENT3}${C.bold} | |\\/| / -_) _ \\ V  V / | (__| |__ | | ${C.reset}`,
+    `${ACCENT}${C.bold} |_|  |_\\___\\___/\\_/\\_/   \\___|____|___|${C.reset}`
+];
   logo.forEach(l => console.log(l));
+  console.log("");
   console.log(`  ${MUTED}Terminal AI Assistant${C.reset}`);
   console.log("");
 
@@ -895,12 +1046,17 @@ function banner(cfg, currentChat, historyLen) {
     `${MUTED}profile:${C.reset} ${ACCENT2}${cfg.profile}${C.reset}`,
     `${MUTED}chat:${C.reset} ${SUCCESS}${currentChat}${C.reset}`,
     `${MUTED}msgs:${C.reset} ${TEXT_DIM}${historyLen}${C.reset}`,
+    `${MUTED}pins:${C.reset} ${TEXT_DIM}${pinsCount}${C.reset}`,
   ];
   const sep = `  ${MUTED}│${C.reset}  `;
   console.log(`  ${items.join(sep)}`);
   console.log(`  ${MUTED}${"─".repeat(Math.min(COLS - 4, 60))}${C.reset}`);
 
-  if (!cfg.api_key) { console.log(""); log.warn("API Key not found. Use /key sk-... to set it."); }
+  if (!cfg.api_key) {
+    console.log("");
+    console.log(box(`${WARNING}${C.bold}API Key not found${C.reset}
+${TEXT_DIM}Use /key sk-... to set it.${C.reset}`, { title: "⚠ SETUP", color: WARNING, width: Math.min(COLS - 2, 60) }));
+  }
   console.log(`  ${MUTED}Type /help for commands${C.reset}`);
   console.log("");
 }
@@ -953,6 +1109,7 @@ function printHelp(cfg) {
       items: [
         ["/model [name]",    `Change model ${MUTED}(${cfg.model})${C.reset}`],
         ["/profile [name]",  `Change profile ${MUTED}(${cfg.profile})${C.reset}`],
+        ["/assistant <cmd>",  "List/create/use custom assistants"],
         ["/temp [0.0-2.0]",  `Set temperature`],
         ["/key [sk-...]",    "Set API key"],
         ["/url [http...]",   "Set base URL"],
@@ -962,9 +1119,13 @@ function printHelp(cfg) {
     {
       title: "📦 Other",
       items: [
+        ["/undo",              "Undo last AI file change"],
         ["/export <file>",     "Export history to JSON"],
         ["/import <file>",     "Import history from JSON"],
         ["/template <name>",   "Use prompt template"],
+        ["/pins",            "List pinned messages"],
+        ["/pin [index]",      "Pin last or specific message"],
+        ["/vacuum [opts]",     "Configure chat vacuum"],
         ["/alias",             "Show aliases"],
         ["/stats",             "Show status"],
         ["/help",              "This help"],
@@ -989,9 +1150,10 @@ function printHelp(cfg) {
 
 // ─── Stats ──────────────────────────────────────────────────────────────────
 
-function printStats(cfg, currentChat, historyLen) {
+function printStats(cfg, currentChat, historyLen, pinsCount = 0) {
   console.log("");
   const profile = cfg.profiles[cfg.profile] || cfg.profiles.default;
+  const vac = cfg.vacuum || {};
   const rows = [
     ["Chat",        `${SUCCESS}${currentChat}${C.reset}`],
     ["Messages",    `${TEXT}${historyLen}${C.reset}`],
@@ -1002,6 +1164,8 @@ function printStats(cfg, currentChat, historyLen) {
     ["API Key",     cfg.api_key ? `${SUCCESS}set ${MUTED}(${cfg.api_key.slice(0,8)}...)${C.reset}` : `${ERROR}not set${C.reset}`],
     ["Auto-yes",    cfg.auto_yes ? `${SUCCESS}on${C.reset}` : `${MUTED}off${C.reset}`],
     ["AP Limit",    `${AUTO_CLR}${cfg.autopilot?.max_iterations || 50}${C.reset}`],
+    ["Vacuum",      `${vac.enabled ? SUCCESS + "on" + C.reset : MUTED + "off" + C.reset} ${TEXT_DIM}(drop ${vac.drop_count || 0}, keep ${vac.keep_last || 0})${C.reset}`],
+    ["Pins",        `${TEXT}${pinsCount}${C.reset}`],
     ["CWD",         `${MUTED}${process.cwd()}${C.reset}`],
   ];
   console.log(`  ${ACCENT}${C.bold}◆ Status${C.reset}`);
@@ -1056,19 +1220,22 @@ function printAutopilotConfig(cfg) {
   console.log(`  ${TEXT_DIM}${"Retry delay".padEnd(18)}${C.reset}${AUTO_CLR}${ap.retry_delay_ms || 2000}ms${C.reset}`);
   console.log(`  ${TEXT_DIM}${"Save logs".padEnd(18)}${C.reset}${ap.save_log !== false ? `${SUCCESS}yes${C.reset}` : `${MUTED}no${C.reset}`}`);
   console.log(`  ${TEXT_DIM}${"Trigger cmd".padEnd(18)}${C.reset}${ap.trigger_cmd ? TEXT + ap.trigger_cmd + C.reset : MUTED + "(off)" + C.reset}`);
-  console.log(`  ${TEXT_DIM}${"Log dir".padEnd(18)}${C.reset}${MUTED}~/.meowcli_logs/${C.reset}`);
+  console.log(`  ${TEXT_DIM}${"Log dir".padEnd(18)}${C.reset}${MUTED}~/.meowcli/data/logs/${C.reset}`);
   console.log(`  ${MUTED}${"─".repeat(45)}${C.reset}`);
   console.log("");
 }
 
-function makePrompt(cfg, currentChat) {
+function makePrompt(cfg, currentChat, historyLen = 0) {
   const modelShort = cfg.model.length > 20 ? cfg.model.slice(0, 17) + "..." : cfg.model;
-  return `${C.reset}\n  ${SUCCESS}${C.bold}${currentChat}${C.reset} ${MUTED}·${C.reset} ${ACCENT}${modelShort}${C.reset} ${MUTED}·${C.reset} ${ACCENT2}${cfg.profile}${C.reset}\n  ${ACCENT3}❯${C.reset} `;
+  const meta = `${MUTED}·${C.reset} ${TEXT_DIM}${historyLen} msgs${C.reset}`;
+  return `${C.reset}\n  ${SUCCESS}${C.bold}${currentChat}${C.reset} ${MUTED}·${C.reset} ${ACCENT}${modelShort}${C.reset} ${MUTED}·${C.reset} ${ACCENT2}${cfg.profile}${C.reset} ${meta}\n  ${ACCENT3}❯${C.reset} `;
 }
 
 // ─── Main Loop ──────────────────────────────────────────────────────────────
 
 async function main() {
+  migrateLegacyData();
+  try { fs.mkdirSync(ASSIST_DIR, { recursive: true }); } catch {}
   let cfg = loadConfig();
   let historyState = loadHistoryState();
 
@@ -1116,17 +1283,28 @@ async function main() {
     });
     historyState.chats[currentChat] = history;
     historyState.current = currentChat;
+    const vacHistory = applyVacuum(history, cfg);
+    historyState.chats[currentChat] = vacHistory;
+    history = vacHistory;
+    messages = [{ role: "system", content: cfg.profiles[cfg.profile].system }, ...history];
     saveHistoryState(historyState);
   };
 
-  banner(cfg, currentChat, history.length);
+  const pinsCount = loadPins().length;
+  banner(cfg, currentChat, history.length, pinsCount);
 
   const ask = (q) => new Promise(r => rl.question(q, r));
+
+  console.log(box(`
+${TEXT}Quick tips:${C.reset}
+${TEXT_DIM}• /help — help
+• /pin — save useful reply
+• /vacuum on drop:4 keep:1 — auto cleanup${C.reset}`, { title: "✨ Tips", color: ACCENT3, width: Math.min(COLS - 2, 60) }));
 
   while (true) {
     let input;
     try {
-      input = (await ask(makePrompt(cfg, currentChat))).trim();
+      input = (await ask(makePrompt(cfg, currentChat, history.length))).trim();
     } catch {
       break; // readline closed
     }
@@ -1140,8 +1318,161 @@ async function main() {
     // ── Help ──
     if (input === "/help") { printHelp(cfg); continue; }
 
+    // ── Assistents ──
+    if (input.startsWith("/assistant ")) {
+      const rest = input.slice(11).trim();
+      const [sub, ...args] = rest.split(" ");
+      if (!sub) {
+        log.err("Usage: /assistant <list|new|show|use>");
+        continue;
+      }
+      if (sub === "list") {
+        const names = Object.keys(cfg.profiles || {})
+          .filter(name => !DEFAULT_CONFIG.profiles[name])
+          .sort();
+        console.log("");
+        console.log(`  ${ACCENT}${C.bold}◆ Assistents${C.reset}`);
+        console.log(`  ${MUTED}${"─".repeat(40)}${C.reset}`);
+        if (names.length === 0) {
+          console.log(`  ${MUTED}(none)${C.reset}`);
+        } else {
+          for (const name of names) console.log(`  ${TEXT}${name}${C.reset}`);
+        }
+        console.log(`  ${MUTED}${"─".repeat(40)}${C.reset}`);
+        console.log(`  ${MUTED}Dir:${C.reset} ${TEXT_DIM}${ASSIST_DIR}${C.reset}`);
+        console.log("");
+      } else if (sub === "use") {
+        const name = args.join(" ").trim();
+        if (!name) { log.err("Usage: /assistant use <name>"); continue; }
+        if (!cfg.profiles[name]) { log.err(`Assistant '${name}' not found.`); continue; }
+        cfg.profile = name; saveConfig(cfg);
+        messages[0] = { role: "system", content: cfg.profiles[name].system };
+        log.ok(`Assistant active → ${ACCENT2}${name}${C.reset}`);
+      } else if (sub === "show") {
+        const name = args.join(" ").trim();
+        if (!name) { log.err("Usage: /assistant show <name>"); continue; }
+        const profile = cfg.profiles[name];
+        if (!profile) { log.err(`Assistant '${name}' not found.`); continue; }
+        console.log("");
+        console.log(box(
+          `${ACCENT}${C.bold}${name}${C.reset}
+${MUTED}temp:${C.reset} ${WARNING}${profile.temperature}${C.reset}
+
+${TEXT}${profile.system}${C.reset}`,
+          { title: "🤖 Assistant", color: ACCENT2, width: Math.min(COLS - 2, 70) }
+        ));
+        console.log("");
+      } else if (sub === "new") {
+        const name = args[0];
+        if (!name) { log.err("Usage: /assistant new <name> [temp:<num>] <system>"); continue; }
+        const tempArg = args.find(a => a.startsWith("temp:"));
+        const temperature = tempArg ? parseFloat(tempArg.split(":")[1]) : (cfg.profiles[cfg.profile]?.temperature ?? 0.2);
+        const system = args.filter(a => !a.startsWith("temp:")).slice(1).join(" ").trim();
+        if (!system) { log.err("System prompt required after name."); continue; }
+        if (Number.isNaN(temperature) || temperature < 0 || temperature > 2) {
+          log.err("Temperature must be 0.0 – 2.0");
+          continue;
+        }
+        try {
+          const file = saveAssistantProfile(name, system, temperature);
+          cfg = loadConfig();
+          if (cfg.profile === name) {
+            messages[0] = { role: "system", content: cfg.profiles[name].system };
+          }
+          log.ok(`Assistant saved: ${file}`);
+        } catch (e) {
+          log.err(`Save failed: ${e.message}`);
+        }
+      } else {
+        log.err("Unknown /assistant command. Use: list | new | show | use");
+      }
+      continue;
+    }
+
+    // ── Pins ──
+    if (input.startsWith("/pin")) {
+      const parts = input.split(" ");
+      const idxStr = parts[1];
+      const pins = loadPins();
+      const messagesOnly = messages.filter(m => m.role !== "system");
+      let targetIndex;
+      if (!idxStr) {
+        targetIndex = messagesOnly.length - 1;
+      } else {
+        const parsed = parseInt(idxStr, 10);
+        if (Number.isNaN(parsed)) { log.err("Usage: /pin [index]"); continue; }
+        targetIndex = parsed - 1;
+      }
+      if (targetIndex < 0 || targetIndex >= messagesOnly.length) {
+        log.err("Message index out of range.");
+        continue;
+      }
+      const msg = messagesOnly[targetIndex];
+      const content = msg?.content;
+      const text = typeof content === "string" ? content : JSON.stringify(content, null, 2);
+      const pin = {
+        time: Date.now(),
+        chat: currentChat,
+        role: msg.role,
+        index: targetIndex + 1,
+        content: text.slice(0, 2000)
+      };
+      pins.push(pin);
+      savePins(pins);
+      log.ok(`Pinned message #${pin.index}`);
+      banner(cfg, currentChat, history.length, loadPins().length);
+      continue;
+    }
+
+    if (input === "/pins") {
+      const pins = loadPins();
+      console.log("");
+      console.log(`  ${ACCENT}${C.bold}◆ Pins${C.reset}`);
+      console.log(`  ${MUTED}${"─".repeat(50)}${C.reset}`);
+      if (pins.length === 0) {
+        console.log(`  ${MUTED}(none)${C.reset}`);
+      } else {
+        pins.slice(-50).forEach((p, i) => {
+          const label = `${i + 1}. ${p.chat} · ${p.role} · #${p.index} · ${timeAgo(p.time)}`;
+          console.log(`  ${TEXT}${label}${C.reset}`);
+          const snippet = p.content.replace(/\s+/g, " ").slice(0, 160);
+          console.log(`  ${TEXT_DIM}${snippet}${C.reset}`);
+        });
+      }
+      console.log(`  ${MUTED}${"─".repeat(50)}${C.reset}`);
+      console.log("");
+      continue;
+    }
+
+    // ── Vacuum ──
+    if (input.startsWith("/vacuum")) {
+      const args = input.split(" ").slice(1).filter(Boolean);
+      if (!cfg.vacuum) cfg.vacuum = { ...DEFAULT_CONFIG.vacuum };
+      if (args.length === 0) {
+        log.info(`Vacuum: ${cfg.vacuum.enabled ? "on" : "off"}, drop ${cfg.vacuum.drop_count}, keep ${cfg.vacuum.keep_last}`);
+        continue;
+      }
+      if (args[0] === "on" || args[0] === "off") {
+        cfg.vacuum.enabled = args[0] === "on";
+      }
+      for (const arg of args) {
+        if (arg.startsWith("drop:")) {
+          const v = parseInt(arg.split(":")[1]);
+          if (!Number.isNaN(v) && v >= 0) cfg.vacuum.drop_count = v;
+        }
+        if (arg.startsWith("keep:")) {
+          const v = parseInt(arg.split(":")[1]);
+          if (!Number.isNaN(v) && v >= 0) cfg.vacuum.keep_last = v;
+        }
+      }
+      saveConfig(cfg);
+      log.ok(`Vacuum → ${cfg.vacuum.enabled ? "on" : "off"}, drop ${cfg.vacuum.drop_count}, keep ${cfg.vacuum.keep_last}`);
+      banner(cfg, currentChat, history.length, loadPins().length);
+      continue;
+    }
+
     // ── Stats ──
-    if (input === "/stats") { printStats(cfg, currentChat, history.length); continue; }
+    if (input === "/stats") { printStats(cfg, currentChat, history.length, loadPins().length); continue; }
 
     // ── Clear ──
     if (input === "/clear") {
@@ -1149,6 +1480,7 @@ async function main() {
       history = []; historyState.chats[currentChat] = []; pendingImages = [];
       saveHistoryState(historyState);
       log.ok("Chat context cleared.");
+    banner(cfg, currentChat, history.length, loadPins().length);
       continue;
     }
 
@@ -1329,7 +1661,30 @@ async function main() {
 
     // ── Config ──
     if (input === "/config") { printConfig(cfg); continue; }
-    if (input === "/saveconfig") { saveConfig(cfg); log.ok("Config saved to ~/.meowcli.json"); continue; }
+    if (input === "/saveconfig") { saveConfig(cfg); log.ok("Config saved to ~/.meowcli/data/config.json"); continue; }
+
+    if (input === "/undo") {
+      const undoState = loadUndoState();
+      const last = undoState.pop();
+      if (!last) {
+        log.warn("No changes to undo.");
+      } else {
+        try {
+          if (!last.existed) {
+            if (fs.existsSync(last.path)) fs.unlinkSync(last.path);
+            log.ok(`Undo: removed ${last.path}`);
+          } else {
+            fs.mkdirSync(path.dirname(last.path), { recursive: true });
+            fs.writeFileSync(last.path, last.content, "utf8");
+            log.ok(`Undo: restored ${last.path}`);
+          }
+        } catch (e) {
+          log.err(`Undo failed: ${e.message}`);
+        }
+        saveUndoState(undoState);
+      }
+      continue;
+    }
 
     // ── File tools ──
     if (input.startsWith("/list ")) { console.log(listDir(input.slice(6))); continue; }
