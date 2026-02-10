@@ -38,6 +38,19 @@ Designed for developers who want to pair-program with AI directly in their termi
     ```
     Now you can run `ai` from anywhere!
 
+
+## 🤖 Assistants
+
+Custom assistants are stored in `~/.meowcli/data/assistents` as `.json`, `.txt`, or `.md` files.
+
+**Commands:**
+- `/assistant list`
+- `/assistant show <name>`
+- `/assistant use <name>`
+- `/assistant new <name> [temp:0.2] <system prompt>`
+
+**Switch assistant**: ` /assistant use coder ` or use standard `/profile <name>`.
+
 ## ⚙️ Configuration
 
 On the first run, the tool will ask for your **API Key** and **Base URL**.
