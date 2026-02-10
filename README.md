@@ -16,6 +16,7 @@ Designed for developers who want to pair-program with AI directly in their termi
 *   **📌 Pins:** Save important messages with `/pin` and list them with `/pins`.
 *   **🧹 Chat Vacuum:** Auto-clean old messages with `/vacuum` settings.
 *   **↩️ Undo:** Roll back last AI file changes with `/undo [N]`.
+*   **🌍 Language:** UI can be switched with `/lang ru|en`.
 *   **🤖 Autopilot:** Run autonomous multi-step tasks.
 *   **🔌 Universal Compatibility:** Works with any API compatible with OpenAI `chat/completions` format.
 *   **🛡 Safe Mode:** Shows diffs and asks for confirmation before writing files or running commands.
@@ -52,6 +53,18 @@ Custom assistants are stored in `~/.meowcli/data/assistents` as `.json`, `.txt`,
 
 **Switch assistant**: ` /assistant use coder ` or use standard `/profile <name>`.
 
+
+## 🌍 Language
+
+Switch UI language:
+
+```bash
+/lang en
+/lang ru
+```
+
+Default: `ru` (or set `AI_LANG=en`).
+
 ## ⚙️ Configuration
 
 On the first run, the tool will ask for your **API Key** and **Base URL**.
@@ -65,6 +78,7 @@ Configuration is stored in `~/.meowcli/data/config.json`.
   "api_base": "https://api.openai.com/v1",
   "model": "gpt-4o",
   "profile": "default",
+  "lang": "ru",
   "vacuum": {
     "enabled": true,
     "drop_count": 4,
