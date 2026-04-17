@@ -121,6 +121,7 @@ async function main() {
     }
   } catch {}
   ctx.refreshBanner();
+  await mcpManager.init(ctx.cfg);
   await loadPlugins(ctx.cfg, ctx);
 
   const trustStatus = await trust.checkStatus();
