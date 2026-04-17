@@ -14,6 +14,7 @@ import { getModelPrice } from "../cost-tracker.js";
 import { formatDuration } from "../utils.js";
 import { askPermission, getPermissionStore } from "../permissions.js";
 import { getSandbox, getAuditLogger } from "../security/sandbox.js";
+import { mcpManager } from "../mcp/manager.js";
 
 const MAX_DEPTH = 3;
 const MAX_PARALLEL = 8;
