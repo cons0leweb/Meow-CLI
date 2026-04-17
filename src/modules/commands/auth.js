@@ -2,7 +2,12 @@ import { authManager } from "../auth.js";
 import { log, ACCENT, C, SUCCESS, MUTED } from "../ui.js";
 import { saveConfig } from "../core.js";
 import { isCancel } from "@clack/prompts";
-import open from "open";
+import { exec } from "child_process";
+
+const openUrl = (url) => {
+  const start = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'start' : 'xdg-open';
+  exec(`${start} ${url}`).unref();
+};
 
 export const handleAuth = async (ctx, input) => {
   const [cmd, ...args] = input.split(/\s+/);
