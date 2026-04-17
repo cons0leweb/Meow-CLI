@@ -24,13 +24,12 @@ export class McpClient {
       let finalCommand = this.command;
       let finalArgs = [...this.args];
 
-      // If the command string contains spaces and no arguments were provided,
-      // it's likely a full command line that needs splitting for spawn() with shell: false.
-      if (finalCommand.includes(" ") && finalArgs.length === 0) {
-        // Simple split, handles most cases like "npx -y @mcp/server-figma"
+      // If the command string contains spaces, it's likely a full command line 
+      // that needs splitting for spawn() with shell: false.
+      if (finalCommand.includes(" ")) {
         const parts = finalCommand.split(/\s+/);
         finalCommand = parts[0];
-        finalArgs = parts.slice(1);
+        finalArgs = [...parts.slice(1), ...finalArgs];
       }
 
       this.transport = new StdioClientTransport({
