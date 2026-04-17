@@ -32,7 +32,10 @@ async function callApi(messages, cfg, options = {}) {
     model: cfg.model,
     messages,
     temperature: options.temperature ?? profile.temperature,
-    tools: ALL_TOOLS.map(t => ({ type: "function", function: t })),
+    tools: [
+      ...ALL_TOOLS.map(t => ({ type: "function", function: t })),
+      ...mcpManager.getAllTools()
+    ],
     tool_choice: "auto",
   };
   const res = await fetch(url, {
