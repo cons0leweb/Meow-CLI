@@ -198,6 +198,7 @@ const log = {
   ok:   (s) => console.log(`  ${SUCCESS("✔")} ${TEXT(s)}`),
   warn: (s) => console.log(`  ${WARNING("⚠")} ${WARNING(s)}`),
   err:  (s) => console.log(`  ${ERROR("✘")} ${ERROR(s)}`),
+  error: (s) => console.log(`  ${ERROR("✘")} ${ERROR(s)}`),
   dim:  (s) => console.log(`  ${MUTED(s)}`),
   tool: (name, args) => {
     const argsStr = typeof args === "string" ? args : JSON.stringify(args);
