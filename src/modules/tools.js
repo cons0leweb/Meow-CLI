@@ -1029,14 +1029,6 @@ async function toolChain(steps, cfg, env) {
 async function executeTool(name, args, cfg, env = process.env) {
   const cleanName = (name || "").replace(/^proxy_/, "");
 
-  if (cleanName.startsWith("mcp__")) {
-    try {
-      return await mcpManager.executeMcpTool(cleanName, args);
-    } catch (e) {
-      return `❌ MCP Error: ${e.message}`;
-    }
-  }
-
   switch (cleanName) {
     case "list_dir": return listDir(args.path, args.recursive);
     case "read_file": return readFile(args.path, args.start_line, args.end_line);
