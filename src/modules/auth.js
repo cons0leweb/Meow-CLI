@@ -16,29 +16,29 @@ class AuthManager {
     }
   }
 
-  save(session) {
+  save(session, config) {
     this.session = session;
     try {
-      const config = loadConfig();
-      config.auth_session = session;
+      const cfg = config || loadConfig();
+      cfg.auth_session = session;
       
       // If we have an active session, ensure we have a provider for it
       if (session && session.access_token) {
         const baseUrl = session.server || "https://meowcube.space";
         
-        if (!config.providers.meowcube) {
-          config.providers.meowcube = {
+        if (!cfg.providers.meowcube) {
+          cfg.providers.meowcube = {
             base_url: `${baseUrl}/v1`,
             api_key: session.access_token,
             model: "gpt-4-turbo"
           };
         } else {
-          config.providers.meowcube.api_key = session.access_token;
-          config.providers.meowcube.base_url = `${baseUrl}/v1`;
+          cfg.providers.meowcube.api_key = session.access_token;
+          cfg.providers.meowcube.base_url = `${baseUrl}/v1`;
         }
       }
       
-      saveConfig(config);
+      saveConfig(cfg);
     } catch (e) {
       log.error("Failed to save auth session: " + e.message);
     }
