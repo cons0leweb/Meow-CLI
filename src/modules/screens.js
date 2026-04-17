@@ -276,7 +276,6 @@ function printStats(cfg, currentChat, historyLen, pinsCount = 0) {
   const pluginSummary = getPluginSummary(cfg);
   let mcpCount = 0;
   try {
-    const { mcpManager } = await import("./mcp/manager.js");
     mcpCount = mcpManager.getStatus().filter(s => s.status === "running").length;
   } catch {}
   const rows = [
