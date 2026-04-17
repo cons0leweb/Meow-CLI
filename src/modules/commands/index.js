@@ -17,6 +17,7 @@ import { handleCost } from "./cost.js";
 import { handleCompact } from "./compact.js";
 import { handleInit } from "./init.js";
 import { handleProvider } from "./provider.js";
+import { handleAuth } from "./auth.js";
 import { mcpHandler as handleMcp } from "./mcp.js";
 import { commands as optimizeCommands } from "./optimize.js";
 import {
