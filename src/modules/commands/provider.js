@@ -1,5 +1,6 @@
 import { select, text, password, isCancel } from "@clack/prompts";
 import { log, saveConfig, SUCCESS, C, ACCENT, MUTED } from "../../core.js";
+import { handleAuth } from "./auth.js";
 
 /**
  * Handles /provider command to manage API profiles.
