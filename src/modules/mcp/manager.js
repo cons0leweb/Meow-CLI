@@ -89,7 +89,7 @@ class McpManager {
         name,
         status: client.status,
         tools: client.tools.length,
-        command: client.command
+        command: client.url || client.command
       });
     }
     return status;
