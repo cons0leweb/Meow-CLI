@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { log, ACCENT, TEXT_DIM, MUTED } from "./ui.js";
+import { mcpManager } from "./mcp/manager.js";
 
 const ALL_TOOLS = [
   { name: "list_dir", description: "List files and directories at the given path. Returns sorted entries with '/' suffix for directories.", parameters: { type: "object", properties: { path: { type: "string", description: "Directory path to list" }, recursive: { type: "boolean", description: "If true, list recursively (max 3 levels deep)" } }, required: ["path"] } },
