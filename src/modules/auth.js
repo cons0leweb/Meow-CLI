@@ -1,6 +1,5 @@
-import { CONF_FILE } from "./config.js";
-import fs from "fs";
-import { log, ACCENT, C } from "./ui.js";
+import { loadConfig, saveConfig } from "./persistence.js";
+import { log } from "./ui.js";
 
 class AuthManager {
   constructor() {
@@ -10,10 +9,8 @@ class AuthManager {
 
   load() {
     try {
-      if (fs.existsSync(CONF_FILE)) {
-        const config = JSON.parse(fs.readFileSync(CONF_FILE, "utf-8"));
-        this.session = config.auth_session || null;
-      }
+      const config = loadConfig();
+      this.session = config.auth_session || null;
     } catch (e) {
       this.session = null;
     }
@@ -22,14 +19,26 @@ class AuthManager {
   save(session) {
     this.session = session;
     try {
-      const config = JSON.parse(fs.readFileSync(CONF_FILE, "utf-8"));
+      const config = loadConfig();
       config.auth_session = session;
+      
+      // If we have an active session, ensure we have a provider for it
       if (session && session.access_token) {
-        if (config.active_provider === "meowcube") {
-          config.api_key = session.access_token;
+        const baseUrl = session.server || "https://meowcube.space";
+        
+        if (!config.providers.meowcube) {
+          config.providers.meowcube = {
+            base_url: `${baseUrl}/v1`,
+            api_key: session.access_token,
+            model: "gpt-4-turbo"
+          };
+        } else {
+          config.providers.meowcube.api_key = session.access_token;
+          config.providers.meowcube.base_url = `${baseUrl}/v1`;
         }
       }
-      fs.writeFileSync(CONF_FILE, JSON.stringify(config, null, 2));
+      
+      saveConfig(config);
     } catch (e) {
       log.error("Failed to save auth session: " + e.message);
     }
