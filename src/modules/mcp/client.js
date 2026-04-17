@@ -10,7 +10,9 @@ export class McpClient {
     this.name = name;
     this.command = command;
     this.args = args;
-    this.env = env;
+    // Merge process.env to ensure variables like FIGMA_ACCESS_TOKEN are passed
+    // if they are in the environment but not explicitly in config.
+    this.env = { ...process.env, ...env };
     this.client = null;
     this.transport = null;
     this.tools = [];
@@ -19,9 +21,21 @@ export class McpClient {
 
   async start() {
     try {
+      let finalCommand = this.command;
+      let finalArgs = [...this.args];
+
+      // If the command string contains spaces and no arguments were provided,
+      // it's likely a full command line that needs splitting for spawn() with shell: false.
+      if (finalCommand.includes(" ") && finalArgs.length === 0) {
+        // Simple split, handles most cases like "npx -y @mcp/server-figma"
+        const parts = finalCommand.split(/\s+/);
+        finalCommand = parts[0];
+        finalArgs = parts.slice(1);
+      }
+
       this.transport = new StdioClientTransport({
-        command: this.command,
-        args: this.args,
+        command: finalCommand,
+        args: finalArgs,
         env: this.env,
       });
 
