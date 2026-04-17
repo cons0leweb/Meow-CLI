@@ -44,8 +44,8 @@ class AuthManager {
     }
   }
 
-  logout() {
-    this.save(null);
+  logout(config) {
+    this.save(null, config);
   }
 
   get token() {
