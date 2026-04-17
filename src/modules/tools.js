@@ -7,6 +7,7 @@ import { C, WARNING, SUCCESS, ERROR, MUTED, TEXT, TEXT_DIM, log, box, COLS, SHEL
 import { CONF_FILE, DATA_DIR, UNDO_FILE } from "./config.js";
 import { loadUndoState, saveUndoState } from "./persistence.js";
 import { callApi } from "./api.js";
+import { mcpManager } from "./mcp/manager.js";
 
 /**
  * Core tool definitions for the AI model.
