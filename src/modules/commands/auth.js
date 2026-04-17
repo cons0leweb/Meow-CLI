@@ -48,7 +48,7 @@ export const handleAuth = async (ctx, input) => {
             expires_in: status.expires_in,
             user: status.user,
             server: baseUrl
-          });
+          }, ctx.cfg);
           
           log.ok(`Successfully logged in as ${ACCENT}${status.user.email}${C.reset}`);
           
