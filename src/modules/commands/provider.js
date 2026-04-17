@@ -49,6 +49,10 @@ export const handleProvider = async (ctx, input) => {
     return { handled: true };
   }
 
+  if (choice === "login_meow") {
+    return await handleAuth(ctx, "/login");
+  }
+
   if (choice === "add") {
     const id = await text({
       message: "Provider Name (e.g., 'deepseek', 'openrouter')",
