@@ -189,6 +189,15 @@ class SubAgent {
   _getFilteredTools() {
     const allowed = this.env.toolsAllowed;
     let tools = TOOLS.filter(t => allowed.has(t.function.name));
+    
+    // Add MCP tools if allowed
+    const mcpTools = mcpManager.getAllTools();
+    for (const tool of mcpTools) {
+      if (allowed.has(tool.function.name) || allowed.has("mcp__*")) {
+        tools.push(tool);
+      }
+    }
+
     if (this.depth < MAX_DEPTH) {
       tools.push({
         type: "function",
