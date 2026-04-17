@@ -6,6 +6,7 @@ import {
 } from "./ui.js";
 import { t } from "./config.js";
 import { listPlugins } from "./plugins.js";
+import { mcpManager } from "./mcp/manager.js";
 
 function banner(cfg, currentChat, historyLen, pinsCount = 0) {
   console.clear();
