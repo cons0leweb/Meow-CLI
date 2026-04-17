@@ -1,18 +1,18 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import { log, ERROR } from "../ui.js";
 
 /**
  * MCP Client using the official SDK.
  */
 export class McpClient {
-  constructor(name, command, args = [], env = {}) {
+  constructor(name, config = {}) {
     this.name = name;
-    this.command = command;
-    this.args = args;
-    // Merge process.env to ensure variables like FIGMA_ACCESS_TOKEN are passed
-    // if they are in the environment but not explicitly in config.
-    this.env = { ...process.env, ...env };
+    this.command = config.command;
+    this.args = config.args || [];
+    this.env = { ...process.env, ...(config.env || {}) };
+    this.url = config.url;
     this.client = null;
     this.transport = null;
     this.tools = [];
@@ -21,22 +21,28 @@ export class McpClient {
 
   async start() {
     try {
-      let finalCommand = this.command;
-      let finalArgs = [...this.args];
+      if (this.url) {
+        this.transport = new SSEClientTransport(new URL(this.url));
+      } else if (this.command) {
+        let finalCommand = this.command;
+        let finalArgs = [...this.args];
 
-      // If the command string contains spaces, it's likely a full command line 
-      // that needs splitting for spawn() with shell: false.
-      if (finalCommand.includes(" ")) {
-        const parts = finalCommand.split(/\s+/);
-        finalCommand = parts[0];
-        finalArgs = [...parts.slice(1), ...finalArgs];
+        // If the command string contains spaces, it's likely a full command line 
+        // that needs splitting for spawn() with shell: false.
+        if (finalCommand.includes(" ")) {
+          const parts = finalCommand.split(/\s+/);
+          finalCommand = parts[0];
+          finalArgs = [...parts.slice(1), ...finalArgs];
+        }
+
+        this.transport = new StdioClientTransport({
+          command: finalCommand,
+          args: finalArgs,
+          env: this.env,
+        });
+      } else {
+        throw new Error("No command or URL provided for MCP server");
       }
-
-      this.transport = new StdioClientTransport({
-        command: finalCommand,
-        args: finalArgs,
-        env: this.env,
-      });
 
       this.client = new Client(
         {
@@ -49,7 +55,6 @@ export class McpClient {
       );
 
       this.status = "starting";
-      // log(`${MUTED("[MCP:" + this.name + "]")} Spawning: ${finalCommand} ${finalArgs.join(" ")}`);
       await this.client.connect(this.transport);
       
       this.status = "running";
