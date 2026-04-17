@@ -75,7 +75,8 @@ class McpManager {
     
     // MCP results are usually { content: [ { type: 'text', text: '...' } ], isError: false }
     if (result.content && Array.isArray(result.content)) {
-      return result.content.map(c => c.text || JSON.stringify(c)).join("\n");
+      const text = result.content.map(c => c.text || JSON.stringify(c)).join("\n");
+      return result.isError ? `Error: ${text}` : text;
     }
     
     return JSON.stringify(result);
