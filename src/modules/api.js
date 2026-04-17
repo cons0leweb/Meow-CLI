@@ -59,7 +59,10 @@ async function callApiStream(messages, cfg, onChunk) {
     model: cfg.model,
     messages,
     temperature: profile.temperature,
-    tools: ALL_TOOLS.map(t => ({ type: "function", function: t })),
+    tools: [
+      ...ALL_TOOLS.map(t => ({ type: "function", function: t })),
+      ...mcpManager.getAllTools()
+    ],
     stream: true,
   };
   const res = await fetch(url, {
