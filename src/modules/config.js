@@ -114,6 +114,7 @@ const DEFAULT_CONFIG = {
   providers: {},
   mcp_servers: {},
   active_provider: "",
+  meowcube_url: process.env.MEOWCUBE_URL || "https://meowcube.space",
   trust_url: "https://raw.githubusercontent.com/meowcli/meow-cli/main/globals/trust/trust.meow",
   templates: {
     "fix": "Исправь ошибку в следующем коде: {code}. Объясни, в чем была проблема.",
