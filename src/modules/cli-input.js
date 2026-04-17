@@ -9,7 +9,7 @@ export const COMMANDS = [
   // Most common first — these appear first in tab-complete
   "/help", "?", "/clear", "/exit", "/stats", "/config",
   "/ap", "/autopilot",
-  "/model", "/profile", "/provider", "/pv", "/temp", "/key", "/url", "/lang",
+  "/model", "/profile", "/provider", "/pv", "/mcp", "/temp", "/key", "/url", "/lang",
   // Chat
   "/chat list", "/chat new", "/chat use", "/chat delete",
   "/reset", "/compact", "/compact --ai",
