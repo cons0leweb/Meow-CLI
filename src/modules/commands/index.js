@@ -73,6 +73,7 @@ const commandHandlers = [
   handleCompact,
   handleInit,
   handleProvider,
+  handleAuth,
   handleMcp,
   handleLead,
   handleDelegate,
