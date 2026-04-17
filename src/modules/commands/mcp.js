@@ -7,7 +7,7 @@ import { saveConfig } from "../persistence.js";
  * Handler for /mcp command.
  */
 export async function mcpHandler(ctx, input) {
-  const parts = input.split(" ");
+  const parts = input.split(/\s+/);
   const action = parts[1];
 
   if (!action) {
@@ -20,11 +20,59 @@ export async function mcpHandler(ctx, input) {
     case "status":
       showStatus();
       break;
+    case "add":
+      const name = parts[2];
+      const urlIdx = parts.indexOf("--url");
+      if (name && urlIdx !== -1 && parts[urlIdx + 1]) {
+        const url = parts[urlIdx + 1];
+        await addServerDirect(ctx, name, { url, enabled: true });
+      } else {
+        await addServer(ctx, name);
+      }
+      break;
+    case "remove":
+      const removeName = parts[2];
+      if (removeName) {
+        await removeServerDirect(ctx, removeName);
+      } else {
+        await removeServer(ctx);
+      }
+      break;
+    case "refresh":
+      await refreshTools();
+      break;
     default:
       log.err("Unknown MCP action. Use /mcp for interactive menu.");
   }
 
   return { handled: true };
+}
+
+async function addServerDirect(ctx, name, serverCfg) {
+  const spinner = clackLog.step(`Connecting to MCP server '${name}'...`);
+  const success = await mcpManager.addServer(name, serverCfg);
+  
+  if (success) {
+    ctx.cfg.mcp_servers = ctx.cfg.mcp_servers || {};
+    ctx.cfg.mcp_servers[name] = serverCfg;
+    saveConfig(ctx.cfg);
+    log.ok(`Server '${name}' added and connected.`);
+  } else {
+    log.err(`Failed to connect to server '${name}'.`);
+  }
+}
+
+async function removeServerDirect(ctx, name) {
+  const success = await mcpManager.removeServer(name);
+  if (success) {
+    if (ctx.cfg.mcp_servers) {
+      delete ctx.cfg.mcp_servers[name];
+      saveConfig(ctx.cfg);
+    }
+    log.ok(`Server '${name}' removed.`);
+  } else {
+    log.err(`Server '${name}' not found.`);
+  }
 }
 
 async function interactiveMenu(ctx) {
@@ -69,64 +117,76 @@ function showStatus() {
     s.name,
     s.status === "running" ? SUCCESS(s.status) : (s.status === "error" ? ERROR(s.status) : WARNING(s.status)),
     String(s.tools),
-    TEXT_DIM(s.command)
+    TEXT_DIM(s.command || "N/A")
   ]);
 
   console.log(table(
-    ["Name", "Status", "Tools", "Command"],
+    ["Name", "Status", "Tools", "Command/URL"],
     rows
   ));
 }
 
-async function addServer(ctx) {
-  const name = await text({
+async function addServer(ctx, initialName) {
+  const name = initialName || await text({
     message: "Server Name",
     placeholder: "e.g. figma, filesystem",
     validate: (v) => !v ? "Name is required" : undefined
   });
   if (isCancel(name)) return;
 
-  const command = await text({
-    message: "Command",
-    placeholder: "e.g. npx -y @modelcontextprotocol/server-figma",
-    validate: (v) => !v ? "Command is required" : undefined
+  const type = await select({
+    message: "Connection Type",
+    options: [
+      { value: "stdio", label: "Local (stdio)", hint: "Run a local command (e.g. npx)" },
+      { value: "sse", label: "Remote (SSE)", hint: "Connect to a URL (HTTPS)" }
+    ]
   });
-  if (isCancel(command)) return;
+  if (isCancel(type)) return;
 
-  const argsInput = await text({
-    message: "Arguments (optional, space separated)",
-    placeholder: "--some-flag value"
-  });
-  if (isCancel(argsInput)) return;
+  let serverCfg = { enabled: true };
 
-  const envInput = await text({
-    message: "Env Vars (optional, KEY=VAL, comma separated)",
-    placeholder: "FIGMA_TOKEN=..., OTHER=..."
-  });
-  if (isCancel(envInput)) return;
-
-  const args = argsInput ? argsInput.split(" ") : [];
-  const env = {};
-  if (envInput) {
-    envInput.split(",").forEach(pair => {
-      const [k, v] = pair.trim().split("=");
-      if (k && v) env[k] = v;
+  if (type === "sse") {
+    const url = await text({
+      message: "Server URL",
+      placeholder: "https://mcp-server.example.com/sse",
+      validate: (v) => !v ? "URL is required" : undefined
     });
-  }
-
-  const serverCfg = { command, args, env, enabled: true };
-  
-  const spinner = clackLog.step("Connecting to MCP server...");
-  const success = await mcpManager.addServer(name, serverCfg);
-  
-  if (success) {
-    ctx.cfg.mcp_servers = ctx.cfg.mcp_servers || {};
-    ctx.cfg.mcp_servers[name] = serverCfg;
-    saveConfig(ctx.cfg);
-    log.ok(`Server '${name}' added and connected.`);
+    if (isCancel(url)) return;
+    serverCfg.url = url;
   } else {
-    log.err(`Failed to connect to server '${name}'. Check logs for details.`);
+    const command = await text({
+      message: "Command",
+      placeholder: "e.g. npx -y @modelcontextprotocol/server-figma",
+      validate: (v) => !v ? "Command is required" : undefined
+    });
+    if (isCancel(command)) return;
+
+    const argsInput = await text({
+      message: "Arguments (optional, space separated)",
+      placeholder: "--some-flag value"
+    });
+    if (isCancel(argsInput)) return;
+
+    const envInput = await text({
+      message: "Env Vars (optional, KEY=VAL, comma separated)",
+      placeholder: "FIGMA_TOKEN=..., OTHER=..."
+    });
+    if (isCancel(envInput)) return;
+
+    const args = argsInput ? argsInput.split(" ") : [];
+    const env = {};
+    if (envInput) {
+      envInput.split(",").forEach(pair => {
+        const [k, v] = pair.trim().split("=");
+        if (k && v) env[k] = v;
+      });
+    }
+    serverCfg.command = command;
+    serverCfg.args = args;
+    serverCfg.env = env;
   }
+  
+  await addServerDirect(ctx, name, serverCfg);
 }
 
 async function removeServer(ctx) {
@@ -148,12 +208,7 @@ async function removeServer(ctx) {
   });
 
   if (confirmed) {
-    await mcpManager.removeServer(name);
-    if (ctx.cfg.mcp_servers) {
-      delete ctx.cfg.mcp_servers[name];
-      saveConfig(ctx.cfg);
-    }
-    log.ok(`Server '${name}' removed.`);
+    await removeServerDirect(ctx, name);
   }
 }
 
