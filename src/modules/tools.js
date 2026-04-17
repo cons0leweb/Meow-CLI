@@ -1098,7 +1098,16 @@ async function executeTool(name, args, cfg, env = process.env) {
       const { linuxPkgManage } = await import("./linux-sys.js");
       return await linuxPkgManage(args, cfg);
     }
-    default: return `❌ Unknown tool: ${name}`;
+    default: {
+      if (cleanName.startsWith("mcp__")) {
+        try {
+          return await mcpManager.executeMcpTool(cleanName, args);
+        } catch (e) {
+          return `❌ MCP Error: ${e.message}`;
+        }
+      }
+      return `❌ Unknown tool: ${name}`;
+    }
   }
 }
 
