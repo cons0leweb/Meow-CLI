@@ -196,6 +196,7 @@ class Spinner {
 const log = {
   info: (s) => console.log(`  ${INFO("ℹ")} ${TEXT(s)}`),
   ok:   (s) => console.log(`  ${SUCCESS("✔")} ${TEXT(s)}`),
+  success: (s) => console.log(`  ${SUCCESS("✔")} ${TEXT(s)}`),
   warn: (s) => console.log(`  ${WARNING("⚠")} ${WARNING(s)}`),
   err:  (s) => console.log(`  ${ERROR("✘")} ${ERROR(s)}`),
   error: (s) => console.log(`  ${ERROR("✘")} ${ERROR(s)}`),
