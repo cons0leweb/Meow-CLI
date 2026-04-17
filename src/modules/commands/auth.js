@@ -81,7 +81,7 @@ export const handleAuth = async (ctx, input) => {
   }
 
   if (cmd === "/logout") {
-    authManager.logout();
+    authManager.logout(ctx.cfg);
     log.ok("Logged out.");
     return { handled: true };
   }
