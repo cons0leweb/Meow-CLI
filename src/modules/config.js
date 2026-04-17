@@ -109,8 +109,10 @@ const DEFAULT_CONFIG = {
     "/pv": "/provider",
     "/trust": "/trust",
     "/opt": "/optimize",
+    "/mcp": "/mcp",
   },
   providers: {},
+  mcp_servers: {},
   active_provider: "",
   trust_url: "https://raw.githubusercontent.com/meowcli/meow-cli/main/globals/trust/trust.meow",
   templates: {
