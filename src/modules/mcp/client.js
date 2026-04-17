@@ -50,6 +50,7 @@ export class McpClient {
       );
 
       this.status = "starting";
+      // log(`${MUTED("[MCP:" + this.name + "]")} Spawning: ${finalCommand} ${finalArgs.join(" ")}`);
       await this.client.connect(this.transport);
       
       this.status = "running";
