@@ -52,25 +52,14 @@ export const handleAuth = async (ctx, input) => {
           
           log.ok(`Successfully logged in as ${ACCENT}${status.user.email}${C.reset}`);
           
-          // Automatically set up MeowCube provider if not exists
-          if (!ctx.cfg.providers.meowcube) {
-            ctx.cfg.providers.meowcube = {
-              base_url: `${baseUrl}/v1`,
-              api_key: status.access_token,
-              model: "gpt-4-turbo"
-            };
-            log.info(`Provider ${ACCENT}meowcube${C.reset} added.`);
-          } else {
-            ctx.cfg.providers.meowcube.api_key = status.access_token;
-          }
-
-          // Switch to it?
+          // Switch to it
           ctx.cfg.active_provider = "meowcube";
-          ctx.cfg.api_base = ctx.cfg.providers.meowcube.base_url;
-          ctx.cfg.api_key = ctx.cfg.providers.meowcube.api_key;
-          ctx.cfg.model = ctx.cfg.providers.meowcube.model;
+          ctx.cfg.api_base = `${baseUrl}/v1`;
+          ctx.cfg.api_key = status.access_token;
+          if (!ctx.cfg.model || ctx.cfg.model === "gpt-4-turbo") {
+             ctx.cfg.model = "gpt-4-turbo";
+          }
           
-          saveConfig(ctx.cfg);
           return { handled: true };
         }
 
