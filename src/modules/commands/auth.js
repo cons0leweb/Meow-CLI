@@ -12,12 +12,14 @@ export const handleAuth = async (ctx, input) => {
     log.info(`Connecting to ${ACCENT}${baseUrl}${C.reset}...`);
 
     try {
-      const { code, poll_id, expires_at } = await authManager.requestAuth(baseUrl);
+      const { code, poll_id, expires_at, auth_url } = await authManager.requestAuth(baseUrl);
       
+      const displayUrl = auth_url || `${baseUrl}/cli-auth?code=${code}`;
+
       log.box(`
   ${SUCCESS("Auth Request Created!")}
   
-  1. Open: ${ACCENT}${baseUrl}/cli-auth${C.reset}
+  1. Open: ${ACCENT}${displayUrl}${C.reset}
   2. Enter code: ${ACCENT}${code}${C.reset}
   
   Expires at: ${new Date(expires_at).toLocaleTimeString()}
@@ -25,7 +27,7 @@ export const handleAuth = async (ctx, input) => {
 
       // Try to open browser
       try {
-        await open(`${baseUrl}/cli-auth?code=${code}`);
+        await open(displayUrl);
       } catch (e) {
         // Ignore if fails
       }
