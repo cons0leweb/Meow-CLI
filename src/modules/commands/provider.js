@@ -35,6 +35,7 @@ export const handleProvider = async (ctx, input) => {
   }));
 
   options.push({ value: "add", label: "➕ Add New Provider", hint: "Configure a new API endpoint" });
+  options.push({ value: "login_meow", label: "🔐 Login with MeowCube", hint: "Connect to meowcube.space" });
   if (Object.keys(providers).length > 0) {
     options.push({ value: "delete", label: "❌ Delete Provider", hint: "Remove an existing configuration" });
   }
