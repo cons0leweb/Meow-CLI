@@ -43,7 +43,7 @@ export class McpClient {
 
       return true;
     } catch (e) {
-      log(`${ERROR("Failed to start MCP server (" + this.name + "):")} ${e.message}`);
+      log.dim(`${ERROR("Failed to start MCP server (" + this.name + "):")} ${e.message}`);
       this.status = "error";
       return false;
     }
@@ -70,7 +70,7 @@ export class McpClient {
       this.tools = result.tools || [];
       return this.tools;
     } catch (e) {
-      log(`${ERROR("Failed to fetch tools from MCP server (" + this.name + "):")} ${e.message}`);
+      log.dim(`${ERROR("Failed to fetch tools from MCP server (" + this.name + "):")} ${e.message}`);
       return [];
     }
   }
