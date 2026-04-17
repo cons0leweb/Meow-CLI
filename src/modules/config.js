@@ -263,6 +263,7 @@ const I18N = {
     cmd_permissions: "Manage tool permissions",
     cmd_context: "Manage project context (MEOW.md)",
     cmd_audit: "Show security audit log",
+    cmd_mcp: "Manage MCP (Model Context Protocol) servers",
     cmd_incognito: "Incognito mode (no data persists)",
     cmd_session: "Manage chat sessions (save/load/list)",
     cmd_cost: "Show token usage & cost",
