@@ -24,9 +24,7 @@ class AuthManager {
     try {
       const config = JSON.parse(fs.readFileSync(CONF_FILE, "utf-8"));
       config.auth_session = session;
-      // Also update api_key if it's MeowCube session
       if (session && session.access_token) {
-        // If we are using MeowCube as provider
         if (config.active_provider === "meowcube") {
           config.api_key = session.access_token;
         }
