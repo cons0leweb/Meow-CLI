@@ -32,7 +32,7 @@ export const handleAuth = async (ctx, input) => {
 
       // Try to open browser
       try {
-        await open(displayUrl);
+        openUrl(displayUrl);
       } catch (e) {
         // Ignore if fails
       }
