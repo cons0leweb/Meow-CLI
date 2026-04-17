@@ -19,7 +19,7 @@ class McpManager {
       await this.servers.get(name).stop();
     }
 
-    const client = new McpClient(name, serverCfg.command, serverCfg.args || [], serverCfg.env || {});
+    const client = new McpClient(name, serverCfg);
     this.servers.set(name, client);
     const success = await client.start();
     if (success) {
