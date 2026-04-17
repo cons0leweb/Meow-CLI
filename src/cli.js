@@ -17,6 +17,7 @@ import {
 } from "./core.js";
 
 import { buildSystemPrompt, loadProjectContext } from "./modules/project-context.js";
+import { mcpManager } from "./modules/mcp/manager.js";
 import { CheckpointManager } from "./modules/checkpoints.js";
 import { SessionManager } from "./modules/sessions.js";
 import { CostTracker } from "./modules/cost-tracker.js";
