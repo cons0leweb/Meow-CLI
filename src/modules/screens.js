@@ -174,7 +174,7 @@ const HELP_SECTIONS = (cfg) => [
       ["/key [sk-...]",      t(cfg, "cmd_key")],
       ["/url [http...]",     t(cfg, "cmd_url")],
       ["/provider",          t(cfg, "cmd_provider")],
-      ["/login",             t(cfg, "cmd_login")],
+      //["/login",             t(cfg, "cmd_login")],
       ["/logout",            t(cfg, "cmd_logout")],
       ["/whoami",            t(cfg, "cmd_whoami")],
       ["/mcp",               t(cfg, "cmd_mcp")],
