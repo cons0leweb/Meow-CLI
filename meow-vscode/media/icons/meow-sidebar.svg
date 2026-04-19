@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+  <!-- Cat ears -->
+  <path d="M4 6 L4 2 L8 5" stroke-width="1.5"/>
+  <path d="M20 6 L20 2 L16 5" stroke-width="1.5"/>
+  <!-- Cat head -->
+  <ellipse cx="12" cy="12" rx="9" ry="8"/>
+  <!-- Eyes -->
+  <circle cx="9" cy="11" r="1.2" fill="currentColor"/>
+  <circle cx="15" cy="11" r="1.2" fill="currentColor"/>
+  <!-- Nose -->
+  <path d="M12 13.5 L11 14.5 L13 14.5 Z" fill="currentColor"/>
+  <!-- Whiskers -->
+  <line x1="3" y1="13" x2="9" y2="13.5"/>
+  <line x1="3" y1="14.5" x2="9" y2="14"/>
+  <line x1="21" y1="13" x2="15" y2="13.5"/>
+  <line x1="21" y1="14.5" x2="15" y2="14"/>
+  <!-- Mouth -->
+  <path d="M11 14.5 Q12 16 13 14.5" fill="none"/>
+</svg>
