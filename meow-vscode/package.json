@@ -28,6 +28,7 @@
   "activationEvents": [
     "onStartupFinished"
   ],
+  "type": "module",
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
