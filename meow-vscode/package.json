@@ -4,7 +4,7 @@
   "description": "The full power of Meow CLI v3 inside VSCode: streaming AI chat, inline code actions, RAG memory, autonomous autopilot, sub-agent delegation, and more.",
   "version": "1.0.0",
   "publisher": "meowcli",
-  "icon": "media/icons/meow-icon.png",
+  "icon": "",
   "engines": {
     "vscode": "^1.85.0"
   },
@@ -28,7 +28,6 @@
   "activationEvents": [
     "onStartupFinished"
   ],
-  "type": "module",
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
@@ -223,14 +222,14 @@
         {
           "command": "meow.gitSummary"
         }
-      ],
-      "submenus": [
-        {
-          "id": "meow.editorContext",
-          "label": "🐱 Meow AI"
-        }
       ]
     },
+    "submenus": [
+      {
+        "id": "meow.editorContext",
+        "label": "🐱 Meow AI"
+      }
+    ],
     "keybindings": [
       {
         "command": "meow.openChat",
@@ -261,9 +260,31 @@
       "properties": {
         "meow.apiProvider": {
           "type": "string",
-          "enum": ["anthropic", "openai", "openrouter", "ollama"],
+          "enum": [
+            "anthropic",
+            "openai",
+            "openrouter",
+            "ollama",
+            "groq",
+            "together",
+            "deepseek",
+            "localai",
+            "vllm",
+            "custom"
+          ],
           "default": "anthropic",
           "description": "AI provider to use"
+        },
+        "meow.customEndpoint": {
+          "type": "string",
+          "default": "http://localhost:8080/v1",
+          "description": "Custom OpenAI-compatible endpoint URL (for localai, vllm, etc.)",
+          "markdownDescription": "Custom endpoint URL for OpenAI-compatible APIs. Example: `http://localhost:8080/v1` for LocalAI, `https://api.groq.com/openai/v1` for Groq"
+        },
+        "meow.customModel": {
+          "type": "string",
+          "default": "",
+          "description": "Model name for custom endpoint (overrides meow.model)"
         },
         "meow.apiKey": {
           "type": "string",
@@ -305,7 +326,11 @@
         },
         "meow.sandboxMode": {
           "type": "string",
-          "enum": ["strict", "workspace", "permissive"],
+          "enum": [
+            "strict",
+            "workspace",
+            "permissive"
+          ],
           "default": "workspace",
           "description": "Sandbox mode: strict (CWD only), workspace (VSCode workspace), permissive (no restriction)"
         },
@@ -330,7 +355,12 @@
         },
         "meow.theme": {
           "type": "string",
-          "enum": ["auto", "dark", "light", "meow"],
+          "enum": [
+            "auto",
+            "dark",
+            "light",
+            "meow"
+          ],
           "default": "auto",
           "description": "UI theme for the chat panel"
         },
@@ -375,6 +405,8 @@
     "esbuild": "^0.20.0"
   },
   "dependencies": {
-    "diff": "^5.2.0"
+    "diff": "^5.2.0",
+    "highlight.js": "^11.11.1",
+    "marked": "^18.0.2"
   }
 }

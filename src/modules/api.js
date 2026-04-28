@@ -21,20 +21,20 @@ const ALL_TOOLS = [
   { name: "git_log", description: "Show recent git commits", parameters: { type: "object", properties: { count: { type: "number", description: "Number of commits (default 10)" }, file: { type: "string", description: "Filter by file" } } } },
   { name: "git_commit", description: "Stage and commit changes", parameters: { type: "object", properties: { message: { type: "string" }, files: { type: "array", items: { type: "string" } } }, required: ["message"] } },
   { name: "git_branch", description: "List, create, or checkout branches", parameters: { type: "object", properties: { name: { type: "string" }, create: { type: "boolean" }, checkout: { type: "boolean" } } } },
-  { name: "git_status", description: "Show git working tree status", parameters: { type: "object" } },
+  //{ name: "git_status", description: "Show git working tree status", parameters: { type: "object", properties: {} } },
   { name: "ci_pipeline", description: "Manage CI/CD. Actions: status (list workflows), generate (create GitHub Actions), heal (auto-fix failing tests)", parameters: { type: "object", properties: { action: { type: "string", enum: ["status", "generate", "heal"], description: "Allowed: status, generate, heal" }, name: { type: "string" }, description: { type: "string" } }, required: ["action"] } }
 ];
 
 async function callApi(messages, cfg, options = {}) {
   const profile = cfg.profiles[cfg.profile] || cfg.profiles.default;
-  const url = cfg.api_base + "/chat/completions";
+  const url = cfg.api_base + "/chat/completions/";
   const body = {
     model: cfg.model,
     messages,
-    temperature: options.temperature ?? profile.temperature,
+    //temperature: options.temperature ?? profile.temperature,
     tools: [
       ...ALL_TOOLS.map(t => ({ type: "function", function: t })),
-      ...mcpManager.getAllTools()
+      //...mcpManager.getAllTools()
     ],
     tool_choice: "auto",
   };
@@ -54,14 +54,14 @@ async function callApi(messages, cfg, options = {}) {
 
 async function callApiStream(messages, cfg, onChunk) {
   const profile = cfg.profiles[cfg.profile] || cfg.profiles.default;
-  const url = cfg.api_base + "/chat/completions";
+  const url = cfg.api_base + "/chat/completions/";
   const body = {
     model: cfg.model,
     messages,
     temperature: profile.temperature,
     tools: [
       ...ALL_TOOLS.map(t => ({ type: "function", function: t })),
-      ...mcpManager.getAllTools()
+      //...mcpManager.getAllTools()
     ],
     stream: true,
   };

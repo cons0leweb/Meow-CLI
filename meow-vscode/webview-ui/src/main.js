@@ -5,10 +5,9 @@
  */
 
 import { MeowChat } from './components/MeowChat.js';
-import { marked } from './lib/marked.js';
-import { hljs } from './lib/highlight.js';
-
 // ─── State ────────────────────────────────────────────────────────────────────
+
+
 
 const state = {
   messages: [],

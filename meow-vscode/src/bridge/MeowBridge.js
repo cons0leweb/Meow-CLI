@@ -74,8 +74,18 @@ export class MeowBridge extends EventEmitter {
     return this.getConfig().get('model') || 'claude-opus-4-5';
   }
 
+  // В методе getProvider() добавляем новый тип
   getProvider() {
-    return this.getConfig().get('apiProvider') || 'anthropic';
+    const cfg = this.getConfig();
+    const provider = cfg.get('apiProvider') || 'anthropic';
+
+    if (provider === 'localai' || provider === 'vllm' || provider === 'groq' ||
+      provider === 'together' || provider === 'deepseek' || provider === 'custom' || provider === 'default' ||
+      provider.startsWith('custom:')) {
+      return 'openai_compatible';
+    }
+
+    return provider;
   }
 
   getWorkspaceRoot() {
@@ -93,14 +103,14 @@ export class MeowBridge extends EventEmitter {
     let projectContext = '';
     const meowMd = path.join(wsRoot, 'MEOW.md');
     if (fs.existsSync(meowMd)) {
-      try { projectContext = fs.readFileSync(meowMd, 'utf8'); } catch {}
+      try { projectContext = fs.readFileSync(meowMd, 'utf8'); } catch { }
     }
 
     // Load project.meow if present
     let projectIndex = '';
     const projectMeow = path.join(wsRoot, 'project.meow');
     if (fs.existsSync(projectMeow)) {
-      try { projectIndex = fs.readFileSync(projectMeow, 'utf8'); } catch {}
+      try { projectIndex = fs.readFileSync(projectMeow, 'utf8'); } catch { }
     }
 
     this.systemPrompt = [
@@ -237,7 +247,7 @@ export class MeowBridge extends EventEmitter {
     const temperature = cfg.get('temperature') || 0.7;
     const stream = cfg.get('streamResponses') !== false;
 
-    if (!apiKey) {
+    if (provider !== 'ollama' && !apiKey) {
       throw new Error('No API key configured. Set meow.apiKey in settings or configure ~/.meowcli/config.json');
     }
 
@@ -252,9 +262,194 @@ export class MeowBridge extends EventEmitter {
         return this._callOpenRouter({ model, apiKey, maxTokens, temperature, stream, tools, onChunk });
       case 'ollama':
         return this._callOllama({ model, maxTokens, temperature, stream, tools, onChunk });
+      case 'openai_compatible':
+        const baseUrl = cfg.get('customEndpoint') || cfg.get('openaiCompatibleEndpoint') || 'http://localhost:8080/v1';
+        return this._callOpenAICompatible({
+          model: cfg.get('customModel') || model,
+          apiKey,
+          baseUrl,
+          maxTokens,
+          temperature,
+          stream,
+          tools,
+          onChunk
+        });
       default:
         throw new Error(`Unknown provider: ${provider}`);
     }
+  }
+
+  /**
+ * Call any OpenAI-compatible API endpoint
+ * Supports: LocalAI, vLLM, Groq, Together AI, DeepSeek, custom endpoints
+ */
+  async _callOpenAICompatible({ model, apiKey, baseUrl, maxTokens, temperature, stream, tools, onChunk }) {
+    const cfg = this.getConfig();
+
+    // Get custom base URL from settings
+    let endpoint = baseUrl || cfg.get('customEndpoint') || 'http://localhost:8080/v1';
+
+    // Remove trailing slash if present
+    endpoint = endpoint.replace(/\/$/, '');
+    const chatUrl = `${endpoint}/chat/completions`;
+
+    const body = {
+      model: model || cfg.get('customModel') || 'llama3.1:8b',
+      max_tokens: maxTokens,
+      temperature,
+      messages: [
+        { role: 'system', content: this.systemPrompt },
+        ...this.history,
+      ],
+      stream,
+    };
+
+    // Add tools if supported
+    if (tools && tools.length > 0) {
+      body.tools = tools.map(t => ({
+        type: 'function',
+        function: {
+          name: t.name,
+          description: t.description,
+          parameters: t.parameters
+        }
+      }));
+    }
+
+    const headers = {
+      'Content-Type': 'application/json',
+    };
+
+    // Add authorization if API key provided
+    if (apiKey) {
+      headers['Authorization'] = `Bearer ${apiKey}`;
+    }
+
+    // For Groq, add special headers
+    const provider = this.getConfig().get('apiProvider');
+    if (provider === 'groq') {
+      // Groq uses standard OpenAI API format, just needs the key
+    }
+
+    // For Together AI
+    if (provider === 'together') {
+      // Together AI uses standard OpenAI API format
+    }
+
+    if (stream) {
+      return this._streamOpenAICompatible(chatUrl, headers, body, onChunk);
+    }
+
+    const data = await this._fetchJson(chatUrl, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+    });
+
+    const choice = data.choices?.[0];
+    const msg = choice?.message;
+    return {
+      content: msg?.content || '',
+      tool_calls: (msg?.tool_calls || []).map(tc => ({
+        id: tc.id,
+        name: tc.function.name,
+        input: JSON.parse(tc.function.arguments || '{}'),
+      })),
+      usage: data.usage || { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+    };
+  }
+
+  async _streamOpenAICompatible(url, headers, body, onChunk) {
+    return new Promise((resolve, reject) => {
+      const bodyStr = JSON.stringify({ ...body, stream: true });
+      const urlObj = new URL(url);
+      const isHttps = urlObj.protocol === 'https:';
+      const lib = isHttps ? https : http;
+
+      const options = {
+        hostname: urlObj.hostname,
+        path: urlObj.pathname + urlObj.search,
+        port: urlObj.port || (isHttps ? 443 : 80),
+        method: 'POST',
+        headers: {
+          ...headers,
+          'Content-Length': Buffer.byteLength(bodyStr),
+        },
+      };
+
+      const req = lib.request(options, (res) => {
+        let fullContent = '';
+        let toolCalls = [];
+        let buffer = '';
+
+        res.on('data', (chunk) => {
+          buffer += chunk.toString();
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue;
+            const data = line.slice(6).trim();
+            if (data === '[DONE]') continue;
+
+            try {
+              const parsed = JSON.parse(data);
+              const delta = parsed.choices?.[0]?.delta;
+
+              if (delta?.content) {
+                fullContent += delta.content;
+                onChunk?.(delta.content);
+              }
+
+              if (delta?.tool_calls) {
+                for (const tc of delta.tool_calls) {
+                  if (tc.id) {
+                    toolCalls.push({
+                      id: tc.id,
+                      name: tc.function?.name,
+                      arguments: '',
+                    });
+                  }
+                  if (tc.function?.arguments) {
+                    const last = toolCalls[toolCalls.length - 1];
+                    if (last) {
+                      last.arguments = (last.arguments || '') + tc.function.arguments;
+                    }
+                  }
+                }
+              }
+            } catch { }
+          }
+        });
+
+        res.on('end', () => {
+          // Parse tool call arguments
+          const parsedToolCalls = toolCalls.map(tc => ({
+            id: tc.id,
+            name: tc.name,
+            input: (() => {
+              try {
+                return JSON.parse(tc.arguments || '{}');
+              } catch {
+                return {};
+              }
+            })(),
+          }));
+
+          resolve({
+            content: fullContent,
+            tool_calls: parsedToolCalls,
+            usage: null,
+          });
+        });
+
+        res.on('error', reject);
+      });
+
+      req.on('error', reject);
+      req.write(bodyStr);
+      req.end();
+    });
   }
 
   async _callAnthropic({ model, apiKey, maxTokens, temperature, stream, tools, onChunk }) {
@@ -345,7 +540,7 @@ export class MeowBridge extends EventEmitter {
                 },
                 onUsage: (u) => { usage = u; },
               });
-            } catch {}
+            } catch { }
           }
         });
 
