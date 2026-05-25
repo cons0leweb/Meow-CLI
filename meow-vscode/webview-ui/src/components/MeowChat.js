@@ -22,51 +22,85 @@ export class MeowChat {
         <!-- Header -->
         <div class="meow-header">
           <div class="meow-header__left">
-            <span class="meow-logo">🐱</span>
+            <svg class="meow-logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
+            </svg>
             <span class="meow-title">Meow AI</span>
             <span class="meow-model" id="meow-model">claude</span>
           </div>
           <div class="meow-header__right">
             <button class="meow-btn meow-btn--icon" id="btn-sessions" title="Sessions">
-              <span class="codicon codicon-history">⏱</span>
+              <svg viewBox="0 0 24 24" class="meow-icon"><path d="M13 3c-4.97 0-9 4.03-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42C8.27 19.99 10.51 21 13 21c4.97 0 9-4.03 9-9s-4.03-9-9-9zm-1 5v5l4.25 2.52.75-1.23-3.5-2.09V8z"/></svg>
             </button>
             <button class="meow-btn meow-btn--icon" id="btn-new-session" title="New Session">
-              <span class="codicon codicon-add">+</span>
+              <svg viewBox="0 0 24 24" class="meow-icon"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
             </button>
             <button class="meow-btn meow-btn--icon" id="btn-compact" title="Compact History">
-              <span class="codicon codicon-fold">✂</span>
+              <svg viewBox="0 0 24 24" class="meow-icon"><path d="M4 19h16v-2H4v2zm16-6H4v2h16v-2zM4 9h16V7H4v2zm16-4H4v2h16V5z"/></svg>
             </button>
             <button class="meow-btn meow-btn--icon" id="btn-settings" title="Settings">
-              <span class="codicon codicon-gear">⚙</span>
+              <svg viewBox="0 0 24 24" class="meow-icon"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
             </button>
           </div>
         </div>
 
         <!-- Cost Bar -->
         <div class="meow-cost-bar" id="meow-cost-bar" style="display:none">
-          <span id="meow-cost-text">$0.0000</span>
-          <span id="meow-tokens-text">0 tokens</span>
+          <span class="meow-cost-bar__item">
+            <svg class="meow-cost-bar__icon" viewBox="0 0 24 24"><path d="M11.8 10.9c-2.27-.59-3-1.2-3-2.15 0-1.09 1.01-1.85 2.7-1.85 1.78 0 2.44.85 2.5 2.1h2.21c-.07-1.72-1.12-3.3-3.21-3.81V3h-3v2.16c-1.94.42-3.5 1.68-3.5 3.61 0 2.31 1.91 3.46 4.7 4.13 2.5.6 3 1.48 3 2.41 0 1.21-1.04 1.93-2.7 1.93-1.96 0-2.73-.93-2.8-2.2H6.3c.08 1.97 1.43 3.3 3.5 3.78V21h3v-2.15c2.05-.37 3.5-1.62 3.5-3.61 0-2.84-2.52-3.75-4.5-4.34z"/></svg>
+            <span id="meow-cost-text">$0.0000</span>
+          </span>
+          <span class="meow-cost-bar__divider">|</span>
+          <span class="meow-cost-bar__item" id="meow-tokens-text">0 tokens</span>
         </div>
 
         <!-- Context Badge -->
         <div class="meow-context-badge" id="meow-context-badge" style="display:none">
-          <span id="meow-context-label"></span>
-          <button class="meow-context-clear" id="btn-clear-context">✕</button>
+          <span class="meow-context-badge__content">
+            <svg class="meow-icon-sm" viewBox="0 0 24 24"><path d="M16 5H8c-1.66 0-3 1.34-3 3v8c0 1.66 1.34 3 3 3h8c1.66 0 3-1.34 3-3V8c0-1.66-1.34-3-3-3zm1 11c0 .55-.45 1-1 1H8c-.55 0-1-.45-1-1V8c0-.55.45-1 1-1h8c.55 0 1 .45 1 1v8z"/></svg>
+            <span id="meow-context-label"></span>
+          </span>
+          <button class="meow-context-clear" id="btn-clear-context" title="Clear context">
+            <svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+          </button>
         </div>
 
         <!-- Messages -->
         <div class="meow-messages" id="meow-messages">
           <div class="meow-welcome" id="meow-welcome">
-            <div class="meow-welcome__icon">🐱</div>
+            <div class="meow-welcome__logo">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </div>
             <div class="meow-welcome__title">Meow AI Agent</div>
-            <div class="meow-welcome__subtitle">Your autonomous coding assistant</div>
+            <div class="meow-welcome__subtitle">Autonomous coding assistant powered by Claude</div>
+            
             <div class="meow-quick-actions">
-              <button class="meow-quick-btn" data-action="explain">💡 Explain file</button>
-              <button class="meow-quick-btn" data-action="review">🔍 Review code</button>
-              <button class="meow-quick-btn" data-action="autopilot">🚀 Autopilot</button>
-              <button class="meow-quick-btn" data-action="git">📝 Git summary</button>
-              <button class="meow-quick-btn" data-action="analyze">📊 Analyze project</button>
-              <button class="meow-quick-btn" data-action="tests">🧪 Generate tests</button>
+              <button class="meow-quick-btn" data-action="explain">
+                <svg viewBox="0 0 24 24" class="meow-icon-sm"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 16h-2v-6h2v6zm0-8h-2V6h2v4z"/></svg>
+                Explain file
+              </button>
+              <button class="meow-quick-btn" data-action="review">
+                <svg viewBox="0 0 24 24" class="meow-icon-sm"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.53c-.26-.81-1-1.4-1.9-1.4h-1v-3c0-.55-.45-1-1-1h-6v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>
+                Review code
+              </button>
+              <button class="meow-quick-btn" data-action="autopilot">
+                <svg viewBox="0 0 24 24" class="meow-icon-sm"><path d="M12 2L2 22l10-4 10 4L12 2z"/></svg>
+                Autopilot
+              </button>
+              <button class="meow-quick-btn" data-action="git">
+                <svg viewBox="0 0 24 24" class="meow-icon-sm"><path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm-5 14H4v-4h11v4zm0-5H4V9h11v4zm5 5h-4V9h4v9z"/></svg>
+                Git summary
+              </button>
+              <button class="meow-quick-btn" data-action="analyze">
+                <svg viewBox="0 0 24 24" class="meow-icon-sm"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 10h-4v4h-2v-4H7v-2h4V7h2v4h4v2z"/></svg>
+                Analyze project
+              </button>
+              <button class="meow-quick-btn" data-action="tests">
+                <svg viewBox="0 0 24 24" class="meow-icon-sm"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 10H7v-2h10v2z"/></svg>
+                Generate tests
+              </button>
             </div>
           </div>
         </div>
@@ -75,10 +109,12 @@ export class MeowChat {
         <div class="meow-input-area">
           <div class="meow-input-toolbar">
             <button class="meow-btn meow-btn--sm" id="btn-attach-file" title="Attach current file">
-              📎 File
+              <svg viewBox="0 0 24 24" class="meow-icon-xs"><path d="M16.5 6v11.5c0 2.21-1.79 4-4 4s-4-1.79-4-4V5c0-3.31 2.69-6 6-6s6 2.69 6 6v10c0 1.1-.9 2-2 2s-2-.9-2-2V6h-2v9c0 2.21 1.79 4 4 4s4-1.79 4-4V5c0-4.42-3.58-8-8-8s-8 3.58-8 8v12c0 3.31 2.69 6 6 6s6-2.69 6-6V6h-2z"/></svg>
+              File
             </button>
             <button class="meow-btn meow-btn--sm" id="btn-attach-selection" title="Attach selection">
-              ✂️ Selection
+              <svg viewBox="0 0 24 24" class="meow-icon-xs"><path d="M9.64 7.64c.23-.2.36-.48.36-.78 0-.55-.45-1-1-1H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2v-5c0-.55-.45-1-1-1s-1 .45-1 1v5H4V8h5c.3 0 .58-.13.78-.36zM17.41 3H14c-.55 0-1 .45-1 1s.45 1 1 1h2.17l-7.46 7.46c-.39.39-.39 1.02 0 1.41.39.39 1.02.39 1.41 0L17 6.41V9c0 .55.45 1 1 1s1-.45 1-1V4.5c0-.83-.67-1.5-1.5-1.5z"/></svg>
+              Selection
             </button>
           </div>
           <div class="meow-input-wrapper">
@@ -90,13 +126,14 @@ export class MeowChat {
               maxlength="100000"
             ></textarea>
             <button class="meow-send-btn" id="btn-send" title="Send (Enter)">
-              <span id="send-icon">➤</span>
+              <svg viewBox="0 0 24 24" class="meow-icon"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
             </button>
           </div>
           <div class="meow-input-footer">
             <span class="meow-char-count" id="meow-char-count">0</span>
             <button class="meow-btn meow-btn--xs meow-btn--danger" id="btn-abort" style="display:none">
-              ⏹ Stop
+              <svg viewBox="0 0 24 24" class="meow-icon-xs"><path d="M6 19h12V5H6v14z"/></svg>
+              Stop
             </button>
           </div>
         </div>
@@ -127,7 +164,7 @@ export class MeowChat {
 
     // Char count
     this.inputEl.addEventListener('input', () => {
-      this.charCount.textContent = this.inputEl.value.length;
+      this.charCount.textContent = this.inputEl.value.length.toLocaleString();
     });
 
     // Send button
@@ -181,8 +218,7 @@ export class MeowChat {
     this.inputEl.addEventListener('dragover', (e) => { e.preventDefault(); });
     this.inputEl.addEventListener('drop', (e) => {
       e.preventDefault();
-      // File drop — just show a hint
-      this.inputEl.value += '\n[File dropped — use 📎 File button to attach the active file]';
+      this.inputEl.value += '\n[File dropped — use Attachment button to add]';
     });
   }
 
@@ -199,7 +235,7 @@ export class MeowChat {
     const prompt = prompts[action];
     if (prompt) {
       this.inputEl.value = prompt;
-      this.charCount.textContent = prompt.length;
+      this.charCount.textContent = prompt.length.toLocaleString();
       this.inputEl.focus();
     }
   }
@@ -254,10 +290,14 @@ export class MeowChat {
     const el = document.createElement('div');
     el.className = 'meow-message meow-message--user';
     el.innerHTML = `
-      <div class="meow-message__avatar">You</div>
+      <div class="meow-message__avatar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2M12 11a4 4 0 100-8 4 4 0 000 8z"/></svg>
+      </div>
       <div class="meow-message__content">
         <div class="meow-message__text">${this._escapeHtml(text)}</div>
-        <div class="meow-message__time">${this._time()}</div>
+        <div class="meow-message__meta">
+          <span class="meow-message__time">${this._time()}</span>
+        </div>
       </div>
     `;
     this.messagesEl.appendChild(el);
@@ -269,7 +309,9 @@ export class MeowChat {
     el.className = 'meow-message meow-message--assistant meow-message--streaming';
     el.id = `msg-${id}`;
     el.innerHTML = `
-      <div class="meow-message__avatar">🐱</div>
+      <div class="meow-message__avatar meow-message__avatar--ai">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+      </div>
       <div class="meow-message__content">
         <div class="meow-message__text" id="text-${id}">
           <span class="meow-cursor"></span>
@@ -287,7 +329,6 @@ export class MeowChat {
 
     const textEl = document.getElementById(`text-${id}`);
     if (textEl) {
-      // Update raw text (will be rendered on finalize)
       textEl.innerHTML = this._escapeHtml(this.streamBuffer[id]) + '<span class="meow-cursor"></span>';
       this._scrollToBottom();
     }
@@ -310,13 +351,38 @@ export class MeowChat {
     // Add action bar
     const contentEl = msgEl.querySelector('.meow-message__content');
     if (contentEl) {
-      contentEl.innerHTML += `
+      const actionsWrapper = document.createElement('div');
+      actionsWrapper.className = 'meow-message__meta';
+      actionsWrapper.innerHTML = `
         <div class="meow-message__actions">
-          <button class="meow-action-btn" onclick="navigator.clipboard.writeText(this.closest('.meow-message__content').querySelector('.meow-message__text').innerText)">📋 Copy</button>
-          <button class="meow-action-btn" data-action="save-memory">🧠 Save to Memory</button>
-          <div class="meow-message__time">${this._time()}</div>
+          <button class="meow-action-btn" id="btn-copy-${id}">
+            <svg viewBox="0 0 24 24" class="meow-icon-xs"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
+            Copy
+          </button>
+          <button class="meow-action-btn" id="btn-memory-${id}">
+            <svg viewBox="0 0 24 24" class="meow-icon-xs"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10zM12 6v6l4 2"/></svg>
+            Save to Memory
+          </button>
         </div>
+        <span class="meow-message__time">${this._time()}</span>
       `;
+      contentEl.appendChild(actionsWrapper);
+
+      // Copy logic
+      actionsWrapper.querySelector(`#btn-copy-${id}`).addEventListener('click', (e) => {
+        const text = textEl.innerText;
+        navigator.clipboard.writeText(text).then(() => {
+          const btn = e.currentTarget;
+          const origText = btn.innerHTML;
+          btn.innerHTML = `<svg viewBox="0 0 24 24" class="meow-icon-xs" style="color:var(--vscode-testing-iconPassedForeground)"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg> Copied`;
+          setTimeout(() => { btn.innerHTML = origText; }, 1500);
+        });
+      });
+
+      // Memory logic
+      actionsWrapper.querySelector(`#btn-memory-${id}`).addEventListener('click', () => {
+        this.vscode.postMessage({ type: 'addMemory', content: textEl.innerText.slice(0, 1000) });
+      });
     }
 
     delete this.streamBuffer[id];
@@ -324,12 +390,6 @@ export class MeowChat {
     this.sendBtn.disabled = false;
     this.state.isStreaming = false;
     this._scrollToBottom();
-
-    // Bind save-memory button
-    msgEl.querySelector('[data-action="save-memory"]')?.addEventListener('click', () => {
-      const text = msgEl.querySelector('.meow-message__text')?.innerText || '';
-      this.vscode.postMessage({ type: 'addMemory', content: text.slice(0, 1000) });
-    });
   }
 
   showToolCall(name, input, id) {
@@ -337,20 +397,14 @@ export class MeowChat {
     el.className = 'meow-tool-call';
     el.id = `tool-${id}`;
 
-    const icons = {
-      read_file: '📖', write_file: '✍️', patch_file: '🔧',
-      list_dir: '📁', grep_search: '🔍', run_shell: '⚡',
-      git_log: '📜', git_diff: '📊', git_status: '🌿',
-      web_search: '🌐', open_file_in_editor: '📂', show_diff: '📋',
-    };
-
-    const icon = icons[name] || '🔧';
     const inputStr = this._formatToolInput(name, input);
 
     el.innerHTML = `
       <div class="meow-tool-call__header">
-        <span class="meow-tool-call__icon">${icon}</span>
-        <span class="meow-tool-call__name">${name}</span>
+        <div class="meow-tool-call__meta">
+          <svg class="meow-tool-call__icon" viewBox="0 0 24 24"><path d="M22.7 19l-9.1-9.1c.9-2.3.4-5-1.5-6.9-2-2-5-2.4-7.4-1.3L9 6 6 9 1.6 4.3C.5 6.7.9 9.8 2.9 11.8c1.9 1.9 4.6 2.4 6.9 1.5l9.1 9.1c.4.4 1 .4 1.4 0l2.3-2.3c.5-.4.5-1.1.1-1.1z"/></svg>
+          <span class="meow-tool-call__name">${name}</span>
+        </div>
         <span class="meow-tool-call__status meow-tool-call__status--running">running...</span>
       </div>
       <div class="meow-tool-call__input">${this._escapeHtml(inputStr)}</div>
@@ -359,14 +413,13 @@ export class MeowChat {
     this.messagesEl.appendChild(el);
     this._scrollToBottom();
 
-    // Mark as done after delay
     setTimeout(() => {
       const statusEl = el.querySelector('.meow-tool-call__status');
       if (statusEl) {
-        statusEl.textContent = 'done ✓';
+        statusEl.textContent = 'done';
         statusEl.className = 'meow-tool-call__status meow-tool-call__status--done';
       }
-    }, 1500);
+    }, 1200);
   }
 
   _formatToolInput(name, input) {
@@ -383,7 +436,7 @@ export class MeowChat {
       case 'list_dir':
         return input.path || '.';
       default:
-        return JSON.stringify(input).slice(0, 100);
+        return JSON.stringify(input).slice(0, 120);
     }
   }
 
@@ -391,7 +444,9 @@ export class MeowChat {
     const el = document.createElement('div');
     el.className = 'meow-message meow-message--error';
     el.innerHTML = `
-      <div class="meow-message__avatar">❌</div>
+      <div class="meow-message__avatar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+      </div>
       <div class="meow-message__content">
         <div class="meow-message__text">Error: ${this._escapeHtml(error)}</div>
       </div>
@@ -413,17 +468,17 @@ export class MeowChat {
   }
 
   showFileContext(ctx) {
-    this.contextLabel.textContent = `📎 ${ctx.fileName}`;
+    this.contextLabel.textContent = ctx.fileName;
     this.contextBadge.style.display = 'flex';
   }
 
   showSelectionContext(ctx) {
-    this.contextLabel.textContent = `✂️ ${ctx.fileName}:${ctx.startLine} (${ctx.language})`;
+    this.contextLabel.textContent = `${ctx.fileName}:${ctx.startLine} (${ctx.language})`;
     this.contextBadge.style.display = 'flex';
   }
 
   showPatchResult(success, message) {
-    this.showInfo(success ? `✅ ${message}` : `❌ ${message}`);
+    this.showInfo(success ? `Applied successfully: ${message}` : `Patch failed: ${message}`);
   }
 
   renderHistory(history) {
@@ -444,7 +499,9 @@ export class MeowChat {
           const el = document.createElement('div');
           el.className = 'meow-message meow-message--assistant';
           el.innerHTML = `
-            <div class="meow-message__avatar">🐱</div>
+            <div class="meow-message__avatar meow-message__avatar--ai">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+            </div>
             <div class="meow-message__content">
               <div class="meow-message__text">${this._renderMarkdown(content)}</div>
             </div>
@@ -459,7 +516,6 @@ export class MeowChat {
   }
 
   renderSessions(sessions) {
-    // Show sessions in a dropdown/panel
     const existing = document.getElementById('meow-sessions-panel');
     if (existing) { existing.remove(); return; }
 
@@ -468,15 +524,17 @@ export class MeowChat {
     panel.className = 'meow-sessions-panel';
     panel.innerHTML = `
       <div class="meow-sessions-panel__header">
-        <span>💾 Sessions</span>
-        <button onclick="this.closest('#meow-sessions-panel').remove()">✕</button>
+        <span>History & Sessions</span>
+        <button class="meow-sessions-panel__close" onclick="this.closest('#meow-sessions-panel').remove()">
+          <svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
       </div>
       <div class="meow-sessions-panel__list">
         ${sessions.length === 0 ? '<div class="meow-sessions-empty">No saved sessions</div>' :
           sessions.map(s => `
             <div class="meow-session-item" data-id="${s.id}">
               <div class="meow-session-item__name">${this._escapeHtml(s.name)}</div>
-              <div class="meow-session-item__meta">${s.messageCount} msgs · ${s.model}</div>
+              <div class="meow-session-item__meta">${s.messageCount} messages · ${s.model}</div>
             </div>
           `).join('')
         }
@@ -494,7 +552,6 @@ export class MeowChat {
   }
 
   clearMessages() {
-    // Keep welcome element, clear all messages
     const msgs = this.messagesEl.querySelectorAll('.meow-message, .meow-tool-call, .meow-info-msg');
     msgs.forEach(el => el.remove());
     if (this.welcomeEl) this.welcomeEl.style.display = 'flex';
@@ -502,12 +559,12 @@ export class MeowChat {
 
   prefillInput(text, options = {}) {
     this.inputEl.value = text;
-    this.charCount.textContent = text.length;
+    this.charCount.textContent = text.length.toLocaleString();
     this.inputEl.focus();
 
     if (options.selection) {
       this.state.selection = { content: options.selection, language: options.language };
-      this.contextLabel.textContent = `✂️ ${options.language || 'code'} selection`;
+      this.contextLabel.textContent = `${options.language || 'code'} selection`;
       this.contextBadge.style.display = 'flex';
     }
 
@@ -531,7 +588,7 @@ export class MeowChat {
 
   updateConfig(config) {
     if (config.model) {
-      const shortModel = config.model.split('-').slice(0, 2).join('-');
+      const shortModel = config.model.split('/').pop().split('-').slice(0, 2).join('-');
       this.modelLabel.textContent = shortModel;
     }
   }
@@ -547,9 +604,7 @@ export class MeowChat {
   _renderMarkdown(text) {
     if (!text) return '';
 
-    // Simple markdown renderer (no external deps in webview)
     let html = text
-      // Escape HTML first
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
@@ -559,8 +614,16 @@ export class MeowChat {
         return `<div class="meow-code-block">
           <div class="meow-code-header">
             <span class="meow-code-lang">${lang || 'code'}</span>
-            <button class="meow-code-copy" onclick="navigator.clipboard.writeText(this.closest('.meow-code-block').querySelector('code').innerText)">📋</button>
-            ${lang ? `<button class="meow-code-apply" data-lang="${lang}">⚡ Apply</button>` : ''}
+            <div class="meow-code-actions">
+              <button class="meow-code-copy">
+                <svg viewBox="0 0 24 24" class="meow-icon-xs"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
+                Copy
+              </button>
+              ${lang ? `<button class="meow-code-apply" data-lang="${lang}">
+                <svg viewBox="0 0 24 24" class="meow-icon-xs"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+                Apply
+              </button>` : ''}
+            </div>
           </div>
           <pre><code class="language-${lang}">${code}</code></pre>
         </div>`;
@@ -569,10 +632,8 @@ export class MeowChat {
       // Inline code
       .replace(/`([^`]+)`/g, '<code class="meow-inline-code">$1</code>')
 
-      // Bold
+      // Bold / Italic
       .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-
-      // Italic
       .replace(/\*([^*]+)\*/g, '<em>$1</em>')
 
       // Headers
@@ -590,7 +651,7 @@ export class MeowChat {
       // Horizontal rule
       .replace(/^---$/gm, '<hr>')
 
-      // Paragraphs (double newlines)
+      // Paragraphs
       .replace(/\n\n/g, '</p><p>')
 
       // Single newlines
@@ -604,8 +665,9 @@ export class MeowChat {
       btn.addEventListener('click', () => {
         const code = btn.closest('.meow-code-block')?.querySelector('code')?.innerText || '';
         navigator.clipboard.writeText(code).then(() => {
-          btn.textContent = '✅';
-          setTimeout(() => { btn.textContent = '📋'; }, 1500);
+          const originalHTML = btn.innerHTML;
+          btn.innerHTML = `<svg viewBox="0 0 24 24" class="meow-icon-xs" style="color:var(--vscode-testing-iconPassedForeground)"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg> Copied`;
+          setTimeout(() => { btn.innerHTML = originalHTML; }, 1500);
         });
       });
     });
@@ -616,7 +678,6 @@ export class MeowChat {
       btn.addEventListener('click', () => {
         const code = btn.closest('.meow-code-block')?.querySelector('code')?.innerText || '';
         const lang = btn.dataset.lang;
-        // Show apply dialog
         this._showApplyDialog(code, lang);
       });
     });
@@ -628,19 +689,22 @@ export class MeowChat {
     dialog.innerHTML = `
       <div class="meow-apply-dialog__content">
         <h3>⚡ Apply Code</h3>
-        <p>Apply this ${lang} code to a file?</p>
-        <input type="text" id="apply-path" placeholder="File path (e.g., src/main.js)" class="meow-input-field">
+        <p>Apply this <strong>${lang}</strong> block to a file path:</p>
+        <input type="text" id="apply-path" placeholder="e.g. src/index.js" class="meow-input-field" autofocus>
         <div class="meow-apply-dialog__actions">
-          <button class="meow-btn meow-btn--primary" id="apply-confirm">Apply</button>
-          <button class="meow-btn" id="apply-cancel">Cancel</button>
+          <button class="meow-btn meow-btn--secondary" id="apply-cancel">Cancel</button>
+          <button class="meow-btn meow-btn--primary" id="apply-confirm">Apply Changes</button>
         </div>
       </div>
     `;
 
     document.body.appendChild(dialog);
 
+    const input = document.getElementById('apply-path');
+    input.focus();
+
     document.getElementById('apply-confirm').addEventListener('click', () => {
-      const filePath = document.getElementById('apply-path').value.trim();
+      const filePath = input.value.trim();
       if (filePath) {
         this.vscode.postMessage({
           type: 'applyPatch',
@@ -653,6 +717,14 @@ export class MeowChat {
     });
 
     document.getElementById('apply-cancel').addEventListener('click', () => dialog.remove());
+    
+    // Support Escape to close
+    dialog.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') dialog.remove();
+      if (e.key === 'Enter' && e.target === input) {
+        document.getElementById('apply-confirm').click();
+      }
+    });
   }
 
   // ─── Utilities ────────────────────────────────────────────────────────────

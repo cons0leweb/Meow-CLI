@@ -25,9 +25,81 @@ const ALL_TOOLS = [
   { name: "ci_pipeline", description: "Manage CI/CD. Actions: status (list workflows), generate (create GitHub Actions), heal (auto-fix failing tests)", parameters: { type: "object", properties: { action: { type: "string", enum: ["status", "generate", "heal"], description: "Allowed: status, generate, heal" }, name: { type: "string" }, description: { type: "string" } }, required: ["action"] } }
 ];
 
+// RPM Limiter for NVIDIA NIM API
+class RPMRateLimiter {
+  constructor(requestsPerMinute = 30) {
+    this.requestsPerMinute = requestsPerMinute;
+    this.queue = [];
+    this.processing = false;
+    this.requestTimes = [];
+  }
+
+  async acquire() {
+    return new Promise((resolve) => {
+      this.queue.push(resolve);
+      if (!this.processing) {
+        this.processQueue();
+      }
+    });
+  }
+
+  async processQueue() {
+    this.processing = true;
+    
+    while (this.queue.length > 0) {
+      const now = Date.now();
+      // Clean old requests (older than 60 seconds)
+      this.requestTimes = this.requestTimes.filter(time => now - time < 60000);
+      
+      if (this.requestTimes.length >= this.requestsPerMinute) {
+        // Need to wait - calculate wait time based on the oldest request in the window
+        const oldestRequest = this.requestTimes[0];
+        const waitTime = 60000 - (now - oldestRequest) + 10; // Add 10ms buffer
+        if (waitTime > 0) {
+          console.log(`[RPM Limiter] Rate limit reached (${this.requestsPerMinute} requests/min). Waiting ${Math.ceil(waitTime)}ms...`);
+          await new Promise(resolve => setTimeout(resolve, waitTime));
+        }
+        continue;
+      }
+      
+      // Process next request
+      const resolve = this.queue.shift();
+      this.requestTimes.push(Date.now());
+      resolve();
+    }
+    
+    this.processing = false;
+  }
+
+  // Method to check if URL is NVIDIA NIM
+  static isNvidiaNim(url) {
+    return url && (url.includes('integrate.api.nvidia.com') || url.includes('nvcf.nvidia.com'));
+  }
+}
+
+// Global rate limiter instance (initialized when needed)
+let rateLimiter = null;
+
+function getRateLimiter(cfg) {
+  const url = cfg.api_base || '';
+  if (RPMRateLimiter.isNvidiaNim(url) && !rateLimiter) {
+    const rpmLimit = cfg.rpm_limit || 30; // Default 30 RPM for NVIDIA NIM
+    rateLimiter = new RPMRateLimiter(rpmLimit);
+    console.log(`[RPM Limiter] Initialized for NVIDIA NIM API with ${rpmLimit} requests/minute limit`);
+  }
+  return rateLimiter;
+}
+
 async function callApi(messages, cfg, options = {}) {
   const profile = cfg.profiles[cfg.profile] || cfg.profiles.default;
-  const url = cfg.api_base + "/chat/completions/";
+  const url = cfg.api_base + "/chat/completions";
+  
+  // Apply RPM limiter for NVIDIA NIM
+  const limiter = getRateLimiter(cfg);
+  if (limiter) {
+    await limiter.acquire();
+  }
+  
   const body = {
     model: cfg.model,
     messages,
@@ -38,11 +110,19 @@ async function callApi(messages, cfg, options = {}) {
     ],
     tool_choice: "auto",
   };
+  
+  const startTime = Date.now();
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json", "Authorization": `Bearer ${cfg.api_key}` },
     body: JSON.stringify(body),
   });
+  const elapsed = Date.now() - startTime;
+  
+  if (limiter) {
+    console.log(`[RPM Limiter] Request completed in ${elapsed}ms`);
+  }
+  
   if (!res.ok) {
     const errText = await res.text();
     let err;
@@ -54,7 +134,14 @@ async function callApi(messages, cfg, options = {}) {
 
 async function callApiStream(messages, cfg, onChunk) {
   const profile = cfg.profiles[cfg.profile] || cfg.profiles.default;
-  const url = cfg.api_base + "/chat/completions/";
+  const url = cfg.api_base + "/chat/completions";
+  
+  // Apply RPM limiter for NVIDIA NIM
+  const limiter = getRateLimiter(cfg);
+  if (limiter) {
+    await limiter.acquire();
+  }
+  
   const body = {
     model: cfg.model,
     messages,
@@ -65,11 +152,19 @@ async function callApiStream(messages, cfg, onChunk) {
     ],
     stream: true,
   };
+  
+  const startTime = Date.now();
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json", "Authorization": `Bearer ${cfg.api_key}` },
     body: JSON.stringify(body),
   });
+  const elapsed = Date.now() - startTime;
+  
+  if (limiter) {
+    console.log(`[RPM Limiter] Stream request started in ${elapsed}ms`);
+  }
+  
   if (!res.ok) throw new Error(`API Error: ${res.status} ${await res.text()}`);
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
@@ -110,4 +205,4 @@ async function callApiStream(messages, cfg, onChunk) {
   return { choices: [{ message: fullMessage }], usage };
 }
 
-export { callApi, callApiStream, ALL_TOOLS };
+export { callApi, callApiStream, ALL_TOOLS, RPMRateLimiter };

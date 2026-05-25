@@ -933,40 +933,140 @@ async function runShell(cmd, cfg = {}, env = process.env) {
 
 /**
  * Makes an HTTP request.
+ * Полностью игнорирует скрытый/невидимый текст в HTML
+ * и выводит warning в консоль при обнаружении.
+ *
  * @param {Object} options - Request options.
  * @returns {Promise<string>} Response details.
  */
-async function httpRequest({ url, method = "GET", headers = {}, body = "", timeout_ms = 15000 }, cfg = {}) {
+
+function stripHiddenContent(html) {
+  if (!html || typeof html !== "string") return html;
+
+  let removed = 0;
+
+  const patterns = [
+    // script/style/noscript/template
+    /<script[\s\S]*?<\/script>/gi,
+    /<style[\s\S]*?<\/style>/gi,
+    /<noscript[\s\S]*?<\/noscript>/gi,
+    /<template[\s\S]*?<\/template>/gi,
+
+    // hidden attribute
+    /<[^>]*\shidden(?:=["'][^"']*["'])?[^>]*>[\s\S]*?<\/[^>]+>/gi,
+
+    // aria-hidden="true"
+    /<[^>]*aria-hidden=["']true["'][^>]*>[\s\S]*?<\/[^>]+>/gi,
+
+    // display:none
+    /<[^>]*style=["'][^"']*display\s*:\s*none[^"']*["'][^>]*>[\s\S]*?<\/[^>]+>/gi,
+
+    // visibility:hidden
+    /<[^>]*style=["'][^"']*visibility\s*:\s*hidden[^"']*["'][^>]*>[\s\S]*?<\/[^>]+>/gi,
+
+    // opacity:0
+    /<[^>]*style=["'][^"']*opacity\s*:\s*0[^"']*["'][^>]*>[\s\S]*?<\/[^>]+>/gi,
+
+    // extremely offscreen elements
+    /<[^>]*style=["'][^"']*(left\s*:\s*-?\d{3,}px|top\s*:\s*-?\d{3,}px)[^"']*["'][^>]*>[\s\S]*?<\/[^>]+>/gi,
+  ];
+
+  for (const pattern of patterns) {
+    html = html.replace(pattern, (match) => {
+      removed++;
+      return "";
+    });
+  }
+
+  if (removed > 0) {
+    console.warn(
+      `[httpRequest] Ignored ${removed} hidden/invisible HTML block(s)`
+    );
+  }
+
+  return html;
+}
+
+async function httpRequest(
+  {
+    url,
+    method = "GET",
+    headers = {},
+    body = "",
+    timeout_ms = 15000,
+  },
+  cfg = {}
+) {
   if (!url) return "❌ Error: url required";
-  const bodyPreview = body && method !== "GET" && method !== "HEAD" ? `\nBody: ${truncatePreview(body, 600)}` : "";
+
+  const bodyPreview =
+    body && method !== "GET" && method !== "HEAD"
+      ? `\nBody: ${truncatePreview(body, 600)}`
+      : "";
+
   const approved = await confirmUser(
     `Make HTTP request?\n${TEXT_DIM}${method} ${url}${bodyPreview}${C.reset}`,
     cfg.auto_yes,
     false
   );
+
   //if (!approved) return `ℹ Cancelled http_request: ${method} ${url}`;
+
   const controller = new AbortController();
   const t = setTimeout(() => controller.abort(), timeout_ms);
+
   try {
     const res = await fetch(url, {
       method,
       headers,
-      body: body && method !== "GET" && method !== "HEAD" ? body : undefined,
+      body:
+        body && method !== "GET" && method !== "HEAD"
+          ? body
+          : undefined,
       signal: controller.signal,
     });
+
     let data = await res.text();
-    if (data.length > 50000) data = data.slice(0, 50000) + `\n…[TRUNCATED]…`;
+
+    // Игнорируем скрытый текст
+    const contentType = res.headers.get("content-type") || "";
+
+    if (contentType.includes("text/html")) {
+      const originalLength = data.length;
+      data = stripHiddenContent(data);
+
+      if (originalLength !== data.length) {
+        console.warn(
+          `[httpRequest] Hidden content stripped (${originalLength - data.length} chars removed)`
+        );
+      }
+    }
+
+    if (data.length > 50000) {
+      data = data.slice(0, 50000) + `\n…[TRUNCATED]…`;
+    }
+
     const headersObj = {};
-    res.headers.forEach((v, k) => headersObj[k] = v);
+    res.headers.forEach((v, k) => {
+      headersObj[k] = v;
+    });
+
     return [
       `STATUS: ${res.status} ${res.statusText}`,
       `HEADERS: ${JSON.stringify(headersObj, null, 2)}`,
       `BODY:\n${data}`,
     ].join("\n\n");
+
   } catch (e) {
-    return `❌ HTTP Error: ${e.name === "AbortError" ? "Timeout" : e.message}`;
-  } finally { clearTimeout(t); }
+    return `❌ HTTP Error: ${
+      e.name === "AbortError" ? "Timeout" : e.message
+    }`;
+  } finally {
+    clearTimeout(t);
+  }
 }
+
+
 
 /**
  * Performs a web search.
