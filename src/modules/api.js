@@ -741,9 +741,22 @@ function getRateLimiter(cfg) {
   return rateLimiter;
 }
 
+/**
+ * Merge MCP tools into the tools list if available.
+ */
+function getMergedTools(cfg) {
+  const baseTools = ALL_TOOLS.map(t => ({ type: "function", function: t }));
+  try {
+    const mcpTools = mcpManager.getAllTools();
+    if (mcpTools && mcpTools.length > 0) {
+      return [...baseTools, ...mcpTools];
+    }
+  } catch {}
+  return baseTools;
+}
+
 async function callApi(messages, cfg, options = {}) {
-  const profile = cfg.profiles[cfg.profile] || cfg.profiles.default;
-  const url = cfg.api_base + "/chat/completions";
+  const schema = getApiSchema(cfg);
   
   // Apply RPM limiter for NVIDIA NIM
   const limiter = getRateLimiter(cfg);
@@ -751,23 +764,14 @@ async function callApi(messages, cfg, options = {}) {
     await limiter.acquire();
   }
   
-  const body = {
-    model: cfg.model,
-    messages,
-    //temperature: options.temperature ?? profile.temperature,
-    tools: [
-      ...ALL_TOOLS.map(t => ({ type: "function", function: t })),
-      //...mcpManager.getAllTools()
-    ],
-    tool_choice: "auto",
-  };
+  // Build request based on schema
+  const { url, headers, body } = buildSchemaRequest(messages, cfg, {
+    ...options,
+    tools: getMergedTools(cfg),
+  });
   
   // Apply custom values from provider config
-  const customOpts = applyCustomValues(cfg, {
-    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${cfg.api_key}` },
-    body: body,
-    url: url,
-  });
+  const customOpts = applyCustomValues(cfg, { headers, body, url });
   
   const startTime = Date.now();
   const res = await fetch(customOpts.url, {
@@ -787,12 +791,15 @@ async function callApi(messages, cfg, options = {}) {
     try { err = JSON.parse(errText); } catch { throw new Error(`API Error: ${res.status} ${res.statusText} - ${errText}`); }
     throw new Error(`API Error: ${err.error?.message || err.message || res.statusText}`);
   }
-  return res.json();
+  
+  const responseData = await res.json();
+  
+  // Parse response based on schema
+  return parseSchemaResponse(responseData, schema);
 }
 
 async function callApiStream(messages, cfg, onChunk) {
-  const profile = cfg.profiles[cfg.profile] || cfg.profiles.default;
-  const url = cfg.api_base + "/chat/completions";
+  const schema = getApiSchema(cfg);
   
   // Apply RPM limiter for NVIDIA NIM
   const limiter = getRateLimiter(cfg);
@@ -800,23 +807,14 @@ async function callApiStream(messages, cfg, onChunk) {
     await limiter.acquire();
   }
   
-  const body = {
-    model: cfg.model,
-    messages,
-    temperature: profile.temperature,
-    tools: [
-      ...ALL_TOOLS.map(t => ({ type: "function", function: t })),
-      //...mcpManager.getAllTools()
-    ],
+  // Build request based on schema
+  const { url, headers, body } = buildSchemaRequest(messages, cfg, {
     stream: true,
-  };
+    tools: getMergedTools(cfg),
+  });
   
   // Apply custom values from provider config
-  const customOpts = applyCustomValues(cfg, {
-    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${cfg.api_key}` },
-    body: body,
-    url: url,
-  });
+  const customOpts = applyCustomValues(cfg, { headers, body, url });
   
   const startTime = Date.now();
   const res = await fetch(customOpts.url, {
@@ -831,6 +829,62 @@ async function callApiStream(messages, cfg, onChunk) {
   }
   
   if (!res.ok) throw new Error(`API Error: ${res.status} ${await res.text()}`);
+  
+  // For non-OpenAI schemas, fall back to non-streaming but call chunks as we get them
+  if (schema !== API_SCHEMA.OPENAI) {
+    // For Claude/Gemini streaming, use the unified stream parser
+    let fullMessage = { role: "assistant", content: "", tool_calls: [] };
+    let usage = null;
+    const toolCallMap = {};
+    
+    for await (const chunk of streamSchemaResponse(res, schema)) {
+      if (chunk.type === "text") {
+        fullMessage.content += chunk.content;
+        onChunk({ type: "text", content: chunk.content });
+      }
+      if (chunk.type === "tool_call") {
+        if (!toolCallMap[chunk.index]) {
+          toolCallMap[chunk.index] = { id: chunk.id, type: "function", function: { name: "", arguments: "" } };
+        }
+        if (chunk.name) toolCallMap[chunk.index].function.name += chunk.name;
+        if (chunk.args) toolCallMap[chunk.index].function.arguments += chunk.args;
+      }
+      if (chunk.type === "tool_start") {
+        // For Claude-style: create a placeholder
+        const idx = Object.keys(toolCallMap).length;
+        toolCallMap[idx] = { id: chunk.tool_call_id, type: "function", function: { name: chunk.name || "", arguments: "" } };
+      }
+      if (chunk.type === "tool_args" && chunk.partial_json) {
+        // Accumulate tool arguments - find the last tool call
+        const keys = Object.keys(toolCallMap);
+        if (keys.length > 0) {
+          const lastKey = keys[keys.length - 1];
+          toolCallMap[lastKey].function.arguments += chunk.partial_json;
+        }
+      }
+      if (chunk.type === "usage") {
+        usage = chunk.usage;
+      }
+      if (chunk.type === "done") break;
+    }
+    
+    fullMessage.tool_calls = Object.values(toolCallMap).filter(Boolean);
+    
+    if (usage) {
+      // Normalize usage
+      if (usage.input_tokens !== undefined) {
+        usage = {
+          prompt_tokens: usage.input_tokens || usage.promptTokenCount || 0,
+          completion_tokens: usage.output_tokens || usage.candidatesTokenCount || 0,
+          total_tokens: (usage.input_tokens || 0) + (usage.output_tokens || 0) || usage.totalTokenCount || 0,
+        };
+      }
+    }
+    
+    return { choices: [{ message: fullMessage }], usage };
+  }
+  
+  // OpenAI streaming (original behavior)
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
@@ -870,4 +924,7 @@ async function callApiStream(messages, cfg, onChunk) {
   return { choices: [{ message: fullMessage }], usage };
 }
 
-export { callApi, callApiStream, ALL_TOOLS, RPMRateLimiter, applyCustomValues };
+export { 
+  callApi, callApiStream, ALL_TOOLS, RPMRateLimiter, applyCustomValues,
+  API_SCHEMA, getApiSchema, buildSchemaRequest, parseSchemaResponse 
+};
