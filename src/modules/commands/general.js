@@ -73,6 +73,58 @@ const commands = [
     }
   },
   {
+    name: "/version",
+    execute: async (ctx) => {
+      const current = getCurrentVersion();
+      console.log(`\n  ${ACCENT.bold("🐾 Meow CLI")}  ${MUTED(`v${current}`)}`);
+      console.log(`  ${MUTED("─".repeat(30))}`);
+      // Quick async check (fire and forget for display)
+      const result = await checkForUpdate();
+      if (result.error) {
+        log.dim(`Update check: ${result.error}`);
+      } else if (result.available) {
+        log.warn(`Update available: ${ACCENT(`v${result.latest}`)} ${MUTED(`(current: v${result.current})`)}`);
+        log.dim(`Type /update to upgrade.`);
+      } else if (result.latest) {
+        log.ok(`You're on the latest version ${MUTED(`(v${result.current})`)}`);
+      }
+      return { handled: true };
+    }
+  },
+  {
+    name: ["/update", "/upgrade"],
+    execute: async (ctx, { rest }) => {
+      const result = await checkForUpdate();
+      
+      if (result.error) {
+        log.err(`Cannot check for updates: ${result.error}`);
+        log.dim(`Check your internet connection or try again later.`);
+        return { handled: true };
+      }
+      
+      if (!result.available) {
+        log.ok(`You're on the latest version ${ACCENT(`v${result.current}`)}`);
+        return { handled: true };
+      }
+
+      console.log(`\n  ${ACCENT.bold("📦 Update Available")}`);
+      console.log(`  ${MUTED("─".repeat(35))}`);
+      console.log(`  ${TEXT_DIM("Current:")}  ${WARNING(`v${result.current}`)}`);
+      console.log(`  ${TEXT_DIM("Latest:")}   ${SUCCESS(`v${result.latest}`)}`);
+
+      // Try to fetch the release page URL
+      const repo = "cons0leweb/Meow-CLI";
+      const releaseUrl = `https://github.com/${repo}/releases/tag/v${result.latest}`;
+      
+      console.log(`\n  ${TEXT_DIM("To update manually, run:")}`);
+      console.log(`  ${ACCENT(`curl -fsSL https://github.com/${repo}/releases/latest/download/meow-cli.tar.xz | tar -xJ`)}`);
+      console.log(`\n  ${MUTED(`Release page: ${releaseUrl}`)}`);
+      console.log(`  ${MUTED("─".repeat(35))}\n`);
+      
+      return { handled: true };
+    }
+  },
+  {
     name: "/clear",
     execute: async (ctx) => {
       ctx.messages = [{ role: "system", content: ctx.cfg.profiles[ctx.cfg.profile].system }];
