@@ -107,6 +107,8 @@ const DEFAULT_CONFIG = {
     "/rt": "/routing",
     "/i": "/init",
     "/pv": "/provider",
+    "/v": "/version",
+    "/ver": "/version",
     "/trust": "/trust",
     "/opt": "/optimize",
     "/mcp": "/mcp",
