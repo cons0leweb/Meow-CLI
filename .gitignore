@@ -1,0 +1,61 @@
+# --- Node.js ---
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+lerna-debug.log*
+
+# --- Environment ---
+.env
+.env.*
+!.env.example
+!.env.template
+
+# --- Build artifacts ---
+dist/
+build/
+out/
+*.tsbuildinfo
+*.vsix
+
+# --- Coverage / Testing ---
+coverage/
+.nyc_output/
+test_tool_verify.txt
+
+# --- OS ---
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# --- IDE / Editor ---
+.idea/
+.vscode/
+!.vscode/extensions.json
+!.vscode/launch.json
+*.sublime-workspace
+
+# --- Logs ---
+logs/
+*.log
+
+# --- Archives ---
+*.tar.xz
+*.tar.gz
+*.zip
+
+# --- VS Code extension specific ---
+meow-vscode/node_modules/
+meow-vscode/out/
+meow-vscode/*.vsix
+meow-vscode/.vscode/
+meow-vscode/src_back/
+
+# --- Misc project files ---
+*.pem
+*.cert
+tmp/
+temp/
