@@ -11,7 +11,13 @@
   "scripts": {
     "start": "node index.js",
     "pipe": "node index.js --pipe",
-    "test": "node --test tests/**/*.test.js"
+    "test": "node --test tests/**/*.test.js",
+    "bump": "node scripts/bump-version.js",
+    "bump:patch": "node scripts/bump-version.js patch",
+    "bump:minor": "node scripts/bump-version.js minor",
+    "bump:major": "node scripts/bump-version.js major",
+    "version:check": "node -e \"import('./src/modules/updater.js').then(m => m.checkForUpdate().then(r => console.log(JSON.stringify(r, null, 2))))\"",
+    "postversion": "git add package.json && git commit -m \"chore: bump version to v$npm_package_version\" --no-verify"
   },
   "keywords": [
     "ai",
