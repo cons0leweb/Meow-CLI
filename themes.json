@@ -1,0 +1,122 @@
+{
+  "default": {
+    "name": "Default",
+    "description": "Original Meow CLI color scheme",
+    "colors": {
+      "accent": "#CC7832",
+      "accent2": "#A98EDA",
+      "accent3": "#CC7832",
+      "success": "#6ABE82",
+      "warning": "#DEB858",
+      "error": "#D26060",
+      "info": "#6CB4DC",
+      "muted": "#646464",
+      "text": "#D4D4D4",
+      "textDim": "#969696",
+      "toolClr": "#6CB4DC",
+      "userClr": "#D4D4D4",
+      "aiClr": "#CC7832",
+      "imgClr": "#D28CB4",
+      "autoClr": "#DEB858",
+      "gradientStart": "#CC7832",
+      "gradientMid": "#EBCB8B",
+      "gradientEnd": "#A98EDA"
+    }
+  },
+  "nord": {
+    "name": "Nord",
+    "description": "Calm, cool Arctic-inspired palette",
+    "colors": {
+      "accent": "#88C0D0",
+      "accent2": "#81A1C1",
+      "accent3": "#B48EAD",
+      "success": "#A3BE8C",
+      "warning": "#EBCB8B",
+      "error": "#BF616A",
+      "info": "#81A1C1",
+      "muted": "#4C566A",
+      "text": "#D8DEE9",
+      "textDim": "#81A1C1",
+      "toolClr": "#81A1C1",
+      "userClr": "#D8DEE9",
+      "aiClr": "#88C0D0",
+      "imgClr": "#B48EAD",
+      "autoClr": "#EBCB8B",
+      "gradientStart": "#88C0D0",
+      "gradientMid": "#81A1C1",
+      "gradientEnd": "#B48EAD"
+    }
+  },
+  "dracula": {
+    "name": "Dracula",
+    "description": "Dark purple-pink theme with high contrast",
+    "colors": {
+      "accent": "#BD93F9",
+      "accent2": "#FF79C6",
+      "accent3": "#BD93F9",
+      "success": "#50FA7B",
+      "warning": "#F1FA8C",
+      "error": "#FF5555",
+      "info": "#8BE9FD",
+      "muted": "#6272A4",
+      "text": "#F8F8F2",
+      "textDim": "#6272A4",
+      "toolClr": "#8BE9FD",
+      "userClr": "#F8F8F2",
+      "aiClr": "#BD93F9",
+      "imgClr": "#FF79C6",
+      "autoClr": "#F1FA8C",
+      "gradientStart": "#BD93F9",
+      "gradientMid": "#FF79C6",
+      "gradientEnd": "#50FA7B"
+    }
+  },
+  "monokai": {
+    "name": "Monokai",
+    "description": "Vibrant classic dark theme",
+    "colors": {
+      "accent": "#A6E22E",
+      "accent2": "#FD971F",
+      "accent3": "#A6E22E",
+      "success": "#A6E22E",
+      "warning": "#FD971F",
+      "error": "#F92672",
+      "info": "#66D9EF",
+      "muted": "#75715E",
+      "text": "#F8F8F2",
+      "textDim": "#75715E",
+      "toolClr": "#66D9EF",
+      "userClr": "#F8F8F2",
+      "aiClr": "#A6E22E",
+      "imgClr": "#FD971F",
+      "autoClr": "#E6DB74",
+      "gradientStart": "#A6E22E",
+      "gradientMid": "#FD971F",
+      "gradientEnd": "#F92672"
+    }
+  },
+  "solarized-light": {
+    "name": "Solarized Light",
+    "description": "Light, high-contrast theme suitable for bright environments",
+    "colors": {
+      "accent": "#268BD2",
+      "accent2": "#6C71C4",
+      "accent3": "#2AA198",
+      "success": "#859900",
+      "warning": "#B58900",
+      "error": "#DC322F",
+      "info": "#268BD2",
+      "muted": "#93A1A1",
+      "text": "#002B36",
+      "textDim": "#657B83",
+      "toolClr": "#268BD2",
+      "userClr": "#002B36",
+      "aiClr": "#268BD2",
+      "imgClr": "#6C71C4",
+      "autoClr": "#B58900",
+      "gradientStart": "#268BD2",
+      "gradientMid": "#6C71C4",
+      "gradientEnd": "#2AA198"
+    }
+  }
+}
