@@ -259,6 +259,7 @@ const I18N = {
     cmd_logout: "Logout from account",
     cmd_whoami: "Show current user",
     cmd_config: "Show current config",
+    cmd_theme: "Change color theme (/theme to list)",
     cmd_provider: "Manage API providers",
     cmd_git: "Configure git auto-commits and prefixes",
     cmd_undo: "Undo last N file changes (simple undo)",
