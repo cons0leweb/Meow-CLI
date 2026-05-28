@@ -278,4 +278,4 @@ async function callApiStream(messages, cfg, onChunk) {
   return { choices: [{ message: fullMessage }], usage };
 }
 
-export { callApi, callApiStream, ALL_TOOLS, RPMRateLimiter };
+export { callApi, callApiStream, ALL_TOOLS, RPMRateLimiter, applyCustomValues };
