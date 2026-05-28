@@ -550,6 +550,7 @@ async function addNewProvider(ctx, providers) {
     ctx.cfg.api_base = baseUrl;
     ctx.cfg.api_key = apiKey;
     ctx.cfg.model = model;
+    ctx.cfg.api_schema = apiSchema;
     log.ok(`Switched to provider: ${ACCENT}${id}${C.reset}`);
   }
 
