@@ -759,6 +759,10 @@ function getMergedTools(cfg) {
 async function callApi(messages, cfg, options = {}) {
   const schema = getApiSchema(cfg);
   
+  // Sanitize tool call sequences to prevent API validation errors
+  // Removes tool_calls from assistant messages that lack corresponding tool responses
+  messages = sanitizeToolCallsForApi(messages);
+  
   // Apply RPM limiter for NVIDIA NIM
   const limiter = getRateLimiter(cfg);
   if (limiter) {
