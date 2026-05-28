@@ -766,6 +766,10 @@ class Autopilot {
     const maxApiRetries = 3;
 
     try {
+      // Sanitize messages to remove incomplete tool call sequences
+      // (e.g., assistant with tool_calls but missing corresponding tool responses)
+      this.messages = sanitizeToolCallsForApi(this.messages);
+
       while (this.iteration < this.maxIterations && !this.aborted) {
         this.iteration++;
         printStatusBar(this);
