@@ -262,9 +262,11 @@ async function handleProviderAction(ctx, providerId) {
     ctx.cfg.api_base = p.base_url;
     ctx.cfg.api_key = p.api_key;
     if (p.model) ctx.cfg.model = p.model;
+    if (p.api_schema) ctx.cfg.api_schema = p.api_schema;
     saveConfig(ctx.cfg);
     log.ok(`Switched to provider: ${ACCENT}${providerId}${C.reset}`);
     log.dim(`URL: ${p.base_url}`);
+    log.dim(`Schema: ${p.api_schema || "openai"}`);
     log.dim(`Model: ${ctx.cfg.model}`);
     return true;
   }
