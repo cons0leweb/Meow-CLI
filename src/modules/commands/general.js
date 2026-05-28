@@ -2,6 +2,10 @@ import {
   C,
   ACCENT,
   MUTED,
+  SUCCESS,
+  WARNING,
+  INFO,
+  TEXT_DIM,
   log,
   printHelp,
   printStats,
@@ -10,6 +14,7 @@ import {
   t
 } from "../../core.js";
 import { getTrustManager, TRUST_LEVEL } from "../trust.js";
+import { checkForUpdate, getCurrentVersion, compareVersions, getVersionDisplay } from "../updater.js";
 
 /**
  * General CLI commands.
