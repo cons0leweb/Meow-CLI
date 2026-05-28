@@ -75,58 +75,57 @@ function styledBuffer(buf, isCommand) {
  * Full-redraw the input area.
  * Moves cursor up to the first line of input, clears all lines, rewrites.
  *
+ * Key fix: uses cursorRow (where the cursor actually is) instead of prevRows
+ * to determine how far up to move. The old code used prevRows-1 which
+ * overshoots when the cursor is in the middle of multi-line input,
+ * causing the input to "creep upward" eating lines above.
+ *
  * @param {string} promptPrefix - e.g. "│  "
  * @param {string} buf          - current buffer text
  * @param {number} cursorIdx    - cursor position in buf (0..buf.length)
- * @param {number} prevRows     - how many terminal rows the previous render occupied
  * @param {number} cols         - terminal width
  * @returns {number} new row count (for next redraw)
  */
-function redraw(promptPrefix, buf, cursorIdx, prevRows, cols) {
+function redraw(promptPrefix, buf, cursorIdx, cols) {
   const prefixLen = visLen(promptPrefix);
   const isCommand = buf.startsWith("/");
 
   // Build the styled display text
   const display = styledBuffer(buf, isCommand);
 
-  // Calculate total visible length = prefix + buf
+  // Calculate positions
   const totalLen = prefixLen + buf.length;
-
-  // How many rows does the current content span?
-  // After writing totalLen chars, the terminal cursor is at row floor(totalLen/cols).
-  // We need prevRows = endRow + 1 so next redraw can move back to row 0.
-  const endRow = Math.floor(totalLen / cols);
-  const newRows = endRow + 1;
-
-  // Move cursor up to the first row of the input area
-  // prevRows - 1 because we're already on the last row
-  if (prevRows > 1) {
-    readline.moveCursor(process.stdout, 0, -(prevRows - 1));
-  }
-  readline.cursorTo(process.stdout, 0);
-
-  // Clear from cursor to end of screen
-  readline.clearScreenDown(process.stdout);
-
-  // Write prompt prefix + styled buffer
-  process.stdout.write(promptPrefix + display);
-
-  // Now position the cursor at cursorIdx within the buffer
-  // Total visible position = prefixLen + cursorIdx
   const cursorPos = prefixLen + cursorIdx;
   const cursorRow = Math.floor(cursorPos / cols);
   const cursorCol = cursorPos % cols;
 
-  // After writing totalLen chars, terminal cursor is at endRow (already computed above)
-  // Move from endRow to cursorRow
-  const rowDiff = cursorRow - endRow;
-  const colTarget = cursorCol;
+  // Move cursor up to the FIRST row of the input area.
+  // The cursor is at row cursorRow (0-based within input).
+  // We need to go up by exactly cursorRow rows — NOT prevRows-1,
+  // which would overshoot when cursor is mid-input.
+  if (cursorRow > 0) {
+    readline.moveCursor(process.stdout, 0, -cursorRow);
+  }
+  readline.cursorTo(process.stdout, 0);
 
+  // Clear everything from cursor to end of screen
+  readline.clearScreenDown(process.stdout);
+
+  // Rewrite prompt + styled buffer
+  process.stdout.write(promptPrefix + display);
+
+  // After writing totalLen visible chars, terminal cursor is at endRow.
+  // Move it back to where the user's cursor should be.
+  const endRow = Math.floor(totalLen / cols);
+  const rowDiff = cursorRow - endRow;
   if (rowDiff !== 0) {
     readline.moveCursor(process.stdout, 0, rowDiff);
   }
-  readline.cursorTo(process.stdout, colTarget);
+  readline.cursorTo(process.stdout, cursorCol);
 
+  // Return number of rows the content occupies (ceil, not floor+1, to
+  // avoid off-by-one when totalLen is an exact multiple of cols)
+  const newRows = Math.ceil(totalLen / cols);
   return newRows;
 }
 
