@@ -13,7 +13,9 @@ import {
   C,
   WARNING,
   MUTED,
-  ACCENT
+  ACCENT,
+  SUCCESS,
+  log
 } from "../core.js";
 
 /**
