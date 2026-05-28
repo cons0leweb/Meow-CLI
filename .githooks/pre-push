@@ -1,0 +1,13 @@
+#!/bin/sh
+# Git pre-push hook — auto-bumps version on push
+# Installed by: node scripts/install-hooks.js
+
+echo "  🐾 Meow CLI: Auto-bumping version..."
+node "$(dirname "$0")/../scripts/bump-version.js" patch
+
+# Stage the updated package.json and amend it into the current commit
+git add "$(dirname "$0")/../package.json"
+# Only amend if there's an existing commit (not on initial push)
+if git rev-parse --quiet HEAD > /dev/null 2>&1; then
+  git commit --amend --no-edit --no-verify 2>/dev/null || true
+fi
