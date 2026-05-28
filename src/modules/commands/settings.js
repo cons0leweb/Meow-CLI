@@ -9,7 +9,11 @@ import {
   log,
   saveConfig,
   printConfig,
-  I18N
+  I18N,
+  listThemes,
+  isValidTheme,
+  getThemeColors,
+  applyTheme
 } from "../../core.js";
 
 /**
