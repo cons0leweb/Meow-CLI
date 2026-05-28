@@ -15,7 +15,9 @@ import {
   MUTED,
   ACCENT,
   SUCCESS,
-  log
+  log,
+  applyTheme,
+  getThemeColors
 } from "../core.js";
 
 /**
