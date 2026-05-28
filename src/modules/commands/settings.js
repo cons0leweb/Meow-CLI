@@ -139,6 +139,39 @@ const handleSettings = async (ctx, input) => {
   if (input === "/config") { printConfig(ctx.cfg); return { handled: true }; }
   if (input === "/saveconfig") { saveConfig(ctx.cfg); log.ok("Config saved to ~/.meowcli/data/config.json"); return { handled: true }; }
 
+  if (input.startsWith("/theme")) {
+    const themeArg = input.split(" ").filter(Boolean)[1];
+    if (!themeArg) {
+      // Show current theme and list available
+      log.info(`Current theme: ${ACCENT}${ctx.cfg.theme || "default"}${C.reset}`);
+      const themes = listThemes();
+      if (themes.length > 0) {
+        const themeList = themes.map(t => {
+          const isCurrent = t.id === (ctx.cfg.theme || "default");
+          const name = isCurrent ? `${SUCCESS}${C.bold}${t.name}${C.reset}` : `${ACCENT}${t.name}${C.reset}`;
+          return `${name} ${MUTED}(${t.id})${C.reset}${isCurrent ? ` ${SUCCESS}✓${C.reset}` : ""}`;
+        });
+        console.log(`  ${MUTED}Available themes:${C.reset}`);
+        themeList.forEach(t => console.log(`    ${t}`));
+        console.log(`  ${TEXT_DIM}Usage: /theme <name> to switch${C.reset}`);
+      }
+      return { handled: true };
+    }
+
+    if (isValidTheme(themeArg)) {
+      ctx.cfg.theme = themeArg;
+      saveConfig(ctx.cfg);
+      // Apply the theme immediately
+      const themeColors = getThemeColors(themeArg);
+      applyTheme(themeColors);
+      log.ok(`Theme → ${ACCENT}${themeArg}${C.reset}`);
+      ctx.refreshBanner();
+    } else {
+      log.err(`Theme '${themeArg}' not found. Use /theme to list available themes.`);
+    }
+    return { handled: true };
+  }
+
   return null;
 };
 
