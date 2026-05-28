@@ -108,7 +108,8 @@ function saveAssistantProfile(name, system, temperature) {
 function loadConfig() {
   const cfg = loadJson(CONF_FILE, DEFAULT_CONFIG);
   const assistantProfiles = loadAssistantsFromDir();
-  return {
+
+  const merged = {
     ...DEFAULT_CONFIG, ...cfg,
     autopilot: { ...DEFAULT_CONFIG.autopilot, ...(cfg.autopilot || {}) },
     plugins: { ...DEFAULT_CONFIG.plugins, ...(cfg.plugins || {}) },
@@ -117,6 +118,13 @@ function loadConfig() {
     templates: { ...DEFAULT_CONFIG.templates, ...(cfg.templates || {}) },
     aliases:   { ...DEFAULT_CONFIG.aliases,   ...(cfg.aliases   || {}) }
   };
+
+  // Apply active provider's api_schema to top-level config
+  if (merged.active_provider && merged.providers?.[merged.active_provider]?.api_schema) {
+    merged.api_schema = merged.providers[merged.active_provider].api_schema;
+  }
+
+  return merged;
 }
 
 /**
