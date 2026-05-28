@@ -48,6 +48,7 @@ const DEFAULT_CONFIG = {
   auto_yes: process.env.AI_AUTO_YES === "1",
   quiet: false,
   profile: "default",
+  theme: process.env.MEOW_THEME || "default",
   lang: process.env.AI_LANG || "ru",
   git: {
     autocommit: true,
