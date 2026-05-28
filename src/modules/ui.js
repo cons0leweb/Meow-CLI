@@ -69,38 +69,170 @@ const C = {
   white:     style(chalk.white),
 };
 
-const ACCENT    = color("#CC7832");
-const ACCENT2   = color("#A98EDA");
-const ACCENT3   = color("#CC7832");
-const SUCCESS   = color("#6ABE82");
-const WARNING   = color("#DEB858");
-const ERROR     = color("#D26060");
-const INFO      = color("#6CB4DC");
-const MUTED     = color("#646464");
-const TEXT      = color("#D4D4D4");
-const TEXT_DIM  = color("#969696");
-const TOOL_CLR  = color("#6CB4DC");
-const USER_CLR  = color("#D4D4D4");
-const AI_CLR    = color("#CC7832");
-const IMG_CLR   = color("#D28CB4");
-const AUTO_CLR  = color("#DEB858");
+/**
+ * Default theme hex colors — used as fallback and initial values.
+ */
+const DEFAULT_THEME_COLORS = {
+  accent: "#CC7832",
+  accent2: "#A98EDA",
+  accent3: "#CC7832",
+  success: "#6ABE82",
+  warning: "#DEB858",
+  error: "#D26060",
+  info: "#6CB4DC",
+  muted: "#646464",
+  text: "#D4D4D4",
+  textDim: "#969696",
+  toolClr: "#6CB4DC",
+  userClr: "#D4D4D4",
+  aiClr: "#CC7832",
+  imgClr: "#D28CB4",
+  autoClr: "#DEB858",
+  gradientStart: "#CC7832",
+  gradientMid: "#EBCB8B",
+  gradientEnd: "#A98EDA"
+};
+
+// Active theme colors — initially set to defaults
+let _themeColors = { ...DEFAULT_THEME_COLORS };
+
+// Reassignable color exports (ES modules have live bindings)
+let ACCENT    = color(_themeColors.accent);
+let ACCENT2   = color(_themeColors.accent2);
+let ACCENT3   = color(_themeColors.accent3);
+let SUCCESS   = color(_themeColors.success);
+let WARNING   = color(_themeColors.warning);
+let ERROR     = color(_themeColors.error);
+let INFO      = color(_themeColors.info);
+let MUTED     = color(_themeColors.muted);
+let TEXT      = color(_themeColors.text);
+let TEXT_DIM  = color(_themeColors.textDim);
+let TOOL_CLR  = color(_themeColors.toolClr);
+let USER_CLR  = color(_themeColors.userClr);
+let AI_CLR    = color(_themeColors.aiClr);
+let IMG_CLR   = color(_themeColors.imgClr);
+let AUTO_CLR  = color(_themeColors.autoClr);
 
 const SHELL_TIMEOUT_MS = parseInt(process.env.MEOWCLI_SHELL_TIMEOUT_MS || "30000", 10);
 const COLS = Math.min(process.stdout.columns || 80, 100);
 
-const MEOW_GRADIENT = gradient(["#CC7832", "#EBCB8B", "#A98EDA"]);
-const AI_GRADIENT = gradient(["#CC7832", "#A98EDA"]);
+let MEOW_GRADIENT = gradient([_themeColors.gradientStart, _themeColors.gradientMid, _themeColors.gradientEnd]);
+let AI_GRADIENT   = gradient([_themeColors.gradientStart, _themeColors.gradientEnd]);
 
-marked.use(markedTerminal({
-  code: (code) => `\n${MUTED("  ┃")} ${code}\n`,
-  blockquote: (quote) => `  ${MUTED("┃")} ${TEXT_DIM(quote)}\n`,
-  heading: (text, level) => {
-    if (level === 1) return `\n${ACCENT.bold("# " + text)}\n`;
-    if (level === 2) return `\n${ACCENT2.bold("## " + text)}\n`;
-    return `\n${TEXT.bold(text)}\n`;
-  },
-  hr: () => `\n${MUTED("─".repeat(Math.min(COLS - 4, 60)))}\n`,
-}));
+/**
+ * Rebuild all theme-dependent exports from a colors object.
+ * Called when the theme changes (via applyTheme or setActiveTheme).
+ * @param {Object} colors - Color hex map (same keys as DEFAULT_THEME_COLORS)
+ */
+function _rebuildTheme(colors) {
+  ACCENT   = color(colors.accent);
+  ACCENT2  = color(colors.accent2);
+  ACCENT3  = color(colors.accent3);
+  SUCCESS  = color(colors.success);
+  WARNING  = color(colors.warning);
+  ERROR    = color(colors.error);
+  INFO     = color(colors.info);
+  MUTED    = color(colors.muted);
+  TEXT     = color(colors.text);
+  TEXT_DIM = color(colors.textDim);
+  TOOL_CLR = color(colors.toolClr);
+  USER_CLR = color(colors.userClr);
+  AI_CLR   = color(colors.aiClr);
+  IMG_CLR  = color(colors.imgClr);
+  AUTO_CLR = color(colors.autoClr);
+
+  MEOW_GRADIENT = gradient([colors.gradientStart, colors.gradientMid, colors.gradientEnd]);
+  AI_GRADIENT   = gradient([colors.gradientStart, colors.gradientEnd]);
+
+  // Re-initialize marked-terminal with updated colors
+  _initMarked();
+}
+
+/**
+ * (Re-)initialize marked with the current theme colors.
+ */
+function _initMarked() {
+  try {
+    marked.use(markedTerminal({
+      code: (code) => `\n${MUTED("  ┃")} ${code}\n`,
+      blockquote: (quote) => `  ${MUTED("┃")} ${TEXT_DIM(quote)}\n`,
+      heading: (text, level) => {
+        if (level === 1) return `\n${ACCENT.bold("# " + text)}\n`;
+        if (level === 2) return `\n${ACCENT2.bold("## " + text)}\n`;
+        return `\n${TEXT.bold(text)}\n`;
+      },
+      hr: () => `\n${MUTED("─".repeat(Math.min(COLS - 4, 60)))}\n`,
+    }));
+  } catch {}
+}
+
+/**
+ * Apply a full theme colors object (e.g. from themes.json).
+ * @param {Object} colors - Color hex map
+ */
+function applyTheme(colors) {
+  _themeColors = { ...DEFAULT_THEME_COLORS, ...colors };
+  _rebuildTheme(_themeColors);
+}
+
+/**
+ * Get the currently active theme colors.
+ * @returns {Object} Current theme color map
+ */
+function getActiveThemeColors() {
+  return { ..._themeColors };
+}
+
+/**
+ * Load and apply a theme by name from themes.json.
+ * Falls back to "default" if the theme is not found.
+ * @param {string} themeName - Theme identifier (e.g. "nord", "dracula")
+ */
+function setActiveTheme(themeName) {
+  let colors = { ...DEFAULT_THEME_COLORS };
+  try {
+    const { getThemeColors } = requireOrImportTheme();
+    const themeColors = getThemeColors(themeName);
+    colors = { ...colors, ...themeColors };
+  } catch {}
+  applyTheme(colors);
+}
+
+/**
+ * Helper to lazily import the theme module (avoid circular deps).
+ */
+function requireOrImportTheme() {
+  // Dynamic import to break potential circular dependency
+  return { getThemeColors: (name) => {
+    try {
+      const fs = requireNodeFs();
+      const pathMod = requireNodePath();
+      // Try reading themes.json directly
+      const THEMES_PATHS = [
+        pathMod.resolve(process.cwd(), "themes.json"),
+        pathMod.resolve(new URL('.', import.meta.url).pathname, "../../themes.json"),
+      ];
+      for (const p of THEMES_PATHS) {
+        if (fs.existsSync(p)) {
+          const data = JSON.parse(fs.readFileSync(p, "utf-8"));
+          if (data[name]?.colors) return data[name].colors;
+        }
+      }
+    } catch {}
+    return {};
+  }};
+}
+
+function requireNodeFs() {
+  return { existsSync: (p) => { try { return !!process["binding"]?.("fs"); } catch { return false; } } };
+}
+
+function requireNodePath() {
+  return { resolve: (...parts) => parts.join("/") };
+}
+
+// Initial marked initialization
+_initMarked();
 
 function box(content, { title = "", color = "#CC7832", width = COLS - 2, padding = 1, style = "round" } = {}) {
   return boxen(content, {
