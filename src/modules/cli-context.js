@@ -74,6 +74,20 @@ const createCliContext = () => {
     banner(ctx.cfg, ctx.currentChat, ctx.history.length, pinsCount);
   };
 
+  // Non-blocking update check on startup
+  (async () => {
+    try {
+      const { checkForUpdate, compareVersions } = await import("../core.js");
+      const result = await checkForUpdate();
+      if (result.available) {
+        // Small delay so the banner renders first
+        setTimeout(() => {
+          log.warn(`Update available: v${result.current} → ${SUCCESS(`v${result.latest}`)} ${MUTED(`(/update)`)}`);
+        }, 100);
+      }
+    } catch {}
+  })();
+
   return ctx;
 };
 
