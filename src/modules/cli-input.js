@@ -90,43 +90,44 @@ function redraw(promptPrefix, buf, cursorIdx, cols) {
   const prefixLen = visLen(promptPrefix);
   const isCommand = buf.startsWith("/");
 
-  // Build the styled display text
   const display = styledBuffer(buf, isCommand);
 
-  // Calculate positions
+  // Реальная длина отображения
   const totalLen = prefixLen + buf.length;
   const cursorPos = prefixLen + cursorIdx;
-  const cursorRow = Math.floor(cursorPos / cols);
+
+  // Корректный расчёт строк
+  const endRow = Math.max(0, Math.floor((totalLen) / cols));
+  const cursorRow = Math.max(0, Math.floor((cursorPos) / cols));
+
   const cursorCol = cursorPos % cols;
 
-  // Move cursor up to the FIRST row of the input area.
-  // The cursor is at row cursorRow (0-based within input).
-  // We need to go up by exactly cursorRow rows — NOT prevRows-1,
-  // which would overshoot when cursor is mid-input.
+  // Поднимаемся к первой строке инпута
   if (cursorRow > 0) {
     readline.moveCursor(process.stdout, 0, -cursorRow);
   }
+
   readline.cursorTo(process.stdout, 0);
 
-  // Clear everything from cursor to end of screen
+  // Чистим только вниз
   readline.clearScreenDown(process.stdout);
 
-  // Rewrite prompt + styled buffer
+  // Перерисовываем
   process.stdout.write(promptPrefix + display);
 
-  // After writing totalLen visible chars, terminal cursor is at endRow.
-  // Move it back to where the user's cursor should be.
-  const endRow = Math.floor(totalLen / cols);
-  const rowDiff = cursorRow - endRow;
-  if (rowDiff !== 0) {
-    readline.moveCursor(process.stdout, 0, rowDiff);
+  // Возвращаем курсор обратно
+  const rowDiff = endRow - cursorRow;
+
+  if (rowDiff > 0) {
+    readline.moveCursor(process.stdout, 0, -rowDiff);
+  } else if (rowDiff < 0) {
+    readline.moveCursor(process.stdout, 0, Math.abs(rowDiff));
   }
+
   readline.cursorTo(process.stdout, cursorCol);
 
-  // Return number of rows the content occupies (ceil, not floor+1, to
-  // avoid off-by-one when totalLen is an exact multiple of cols)
-  const newRows = Math.ceil(totalLen / cols);
-  return newRows;
+  // +1 потому что строка 0 тоже существует
+  return endRow + 1;
 }
 
 /**
@@ -186,7 +187,7 @@ const readMultilineInput = (promptTitle) => new Promise(resolve => {
       // Move to end of input area
       const prefixLen = visLen(promptPrefix);
       const totalLen = prefixLen + buffer.length;
-      const endRow = Math.floor(totalLen / cols);
+      const endRow = Math.max(0, Math.floor(totalLen / cols));
       const cursorRow = Math.floor((prefixLen + cursor) / cols);
       const rowsToEnd = endRow - cursorRow;
       if (rowsToEnd > 0) readline.moveCursor(process.stdout, 0, rowsToEnd);
@@ -356,7 +357,7 @@ const readMultilineInput = (promptTitle) => new Promise(resolve => {
             // Show options
             const prefixLen = visLen(promptPrefix);
             const totalLen = prefixLen + buffer.length;
-            const endRow = Math.floor(totalLen / cols);
+            const endRow = Math.max(0, Math.floor(totalLen / cols));
             const cursorRow = Math.floor((prefixLen + cursor) / cols);
             const rowsToEnd = endRow - cursorRow;
             if (rowsToEnd > 0) readline.moveCursor(process.stdout, 0, rowsToEnd);
@@ -367,12 +368,12 @@ const readMultilineInput = (promptTitle) => new Promise(resolve => {
             process.stdout.write(promptPrefix + styledBuffer(buffer, buffer.startsWith("/")));
 
             // Recalculate rows after re-printing
-            rows = Math.ceil((prefixLen + buffer.length) / cols);
+            rows = Math.floor((prefixLen + buffer.length) / cols) + 1;
             // Reposition cursor
             const cursorPos = prefixLen + cursor;
             const cRow = Math.floor(cursorPos / cols);
             const cCol = cursorPos % cols;
-            const eRow = Math.floor((prefixLen + buffer.length) / cols);
+            const eRow = Math.max(0, Math.floor((prefixLen + buffer.length) / cols));
             const rowBack = eRow - cRow;
             if (rowBack > 0) readline.moveCursor(process.stdout, 0, -rowBack);
             readline.cursorTo(process.stdout, cCol);
