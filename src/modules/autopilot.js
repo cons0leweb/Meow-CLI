@@ -794,8 +794,25 @@ class Autopilot {
           if (e.isContextError || /context.?length|token/i.test(e.message || "")) {
             log.warn("Context overflow — compressing…");
             this.messages = this.contextManager.compress(this.messages);
+            this.messages = sanitizeToolCallsForApi(this.messages);
             this.iteration--;
             continue;
+          }
+
+          // Detect broken tool call sequences (assistant with tool_calls but missing tool responses)
+          if (/tool_calls.*must be followed|insufficient tool messages|tool_call_id/i.test(e.message || "")) {
+            log.warn("Broken tool call sequence detected — sanitizing messages");
+            const before = this.messages.length;
+            this.messages = sanitizeToolCallsForApi(this.messages);
+            const removed = before - this.messages.length;
+            this._log("tool_call_sanitize", `Removed ${removed} broken tool_calls entries`);
+            if (removed > 0) {
+              log.auto(`Fixed ${removed} incomplete tool call(s), retrying…`);
+              apiRetries = 0; // Reset retry counter since we fixed the issue
+              this.iteration--;
+              continue;
+            }
+            // If sanitization didn't help, fall through to normal error handling
           }
 
           if (this.recovery.isApiError(e) && apiRetries < maxApiRetries) {
