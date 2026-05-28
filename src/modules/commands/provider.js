@@ -244,12 +244,13 @@ async function handleProviderAction(ctx, providerId) {
   const active = ctx.cfg.active_provider;
   const isActive = providerId === active;
 
+  const schemaLabel = printSchemaInfo(p);
   const action = await select({
     message: `Provider: "${ACCENT}${providerId}${C.reset}"`,
     options: [
-      { value: "switch", label: isActive ? "✅ Already Active" : "🔌 Switch to This Provider", hint: p.base_url },
+      { value: "switch", label: isActive ? "✅ Already Active" : "🔌 Switch to This Provider", hint: `${p.base_url} ${schemaLabel}` },
       { value: "custom", label: "⚙️ Configure Custom Values", hint: "Headers, body params, query params" },
-      { value: "edit", label: "✏️ Edit Provider Settings", hint: "Change URL, API key, model" },
+      { value: "edit", label: "✏️ Edit Provider Settings", hint: "Change URL, API key, model, schema" },
       { value: "back", label: "🔙 Back to Provider List" }
     ]
   });
