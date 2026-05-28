@@ -31,6 +31,14 @@ const createCliContext = () => {
   let cfg = loadConfig();
   let historyState = loadHistoryState();
 
+  // Apply theme from config
+  if (cfg.theme) {
+    try {
+      const themeColors = getThemeColors(cfg.theme);
+      applyTheme(themeColors);
+    } catch {}
+  }
+
   if (!cfg.profiles[cfg.profile]) cfg.profile = "default";
   if (!historyState.chats[historyState.current]) historyState.chats[historyState.current] = [];
 
