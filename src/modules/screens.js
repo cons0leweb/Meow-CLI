@@ -27,6 +27,7 @@ function banner(cfg, currentChat, historyLen, pinsCount = 0) {
     [`msgs`,    `${TEXT_DIM(historyLen)}`],
   ];
   if (pinsCount > 0) pairs.push([`pins`, `${TEXT_DIM(pinsCount)}`]);
+  pairs.unshift([`ver`, `${MUTED(getVersionDisplay())}`]);
   const statusLine = pairs.map(([k, v]) => `${MUTED(k + ":")} ${v}`).join(`  ${MUTED("·")}  `);
   console.log(`  ${statusLine}`);
   if (!cfg.api_key) {
