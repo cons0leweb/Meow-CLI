@@ -202,6 +202,8 @@ const HELP_SECTIONS = (cfg) => [
       ["/vacuum [opts]",     t(cfg, "cmd_vacuum")],
       ["/alias",             t(cfg, "cmd_alias")],
       ["/stats",             t(cfg, "cmd_stats")],
+      ["/version",           "Show current version & check for updates"],
+      ["/update",            "Check for and show update instructions"],
       ["/help [topic]",      t(cfg, "cmd_help")],
       ["/exit",              t(cfg, "cmd_exit")],
     ]
