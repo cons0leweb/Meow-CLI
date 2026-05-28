@@ -77,7 +77,7 @@ const createCliContext = () => {
   // Non-blocking update check on startup
   (async () => {
     try {
-      const { checkForUpdate, compareVersions } = await import("../core.js");
+      const { checkForUpdate } = await import("./updater.js");
       const result = await checkForUpdate();
       if (result.available) {
         // Small delay so the banner renders first
