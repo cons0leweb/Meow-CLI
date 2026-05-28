@@ -170,11 +170,18 @@ async function callApi(messages, cfg, options = {}) {
     tool_choice: "auto",
   };
   
-  const startTime = Date.now();
-  const res = await fetch(url, {
-    method: "POST",
+  // Apply custom values from provider config
+  const customOpts = applyCustomValues(cfg, {
     headers: { "Content-Type": "application/json", "Authorization": `Bearer ${cfg.api_key}` },
-    body: JSON.stringify(body),
+    body: body,
+    url: url,
+  });
+  
+  const startTime = Date.now();
+  const res = await fetch(customOpts.url, {
+    method: "POST",
+    headers: customOpts.headers,
+    body: JSON.stringify(customOpts.body),
   });
   const elapsed = Date.now() - startTime;
   
