@@ -53,6 +53,13 @@ meow-vscode/out/
 meow-vscode/*.vsix
 meow-vscode/.vscode/
 meow-vscode/src_back/
+meow-vscode/
+
+MEOW-CLI-V3-ARCHITECTURE.md
+ARCHITECTURE.md
+COMMANDS.md
+
+scripts/
 
 # --- Misc project files ---
 *.pem
