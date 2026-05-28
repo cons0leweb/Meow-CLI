@@ -283,6 +283,27 @@ async function handleProviderAction(ctx, providerId) {
 }
 
 /**
+ * Returns a human-readable label for an API schema type.
+ */
+function getSchemaLabel(schema) {
+  const labels = {
+    "openai": "OpenAI-совместимая (GPT, DeepSeek, OpenRouter...)",
+    "claude": "Anthropic Claude",
+    "gemini": "Google Gemini",
+  };
+  return labels[schema] || schema || "openai";
+}
+
+/**
+ * Shows the API schema type in a nice format.
+ */
+function printSchemaInfo(p) {
+  const schema = p.api_schema || "openai";
+  const icons = { openai: "🔵", claude: "🟣", gemini: "🟢" };
+  return `${icons[schema] || "🔵"} ${schema.charAt(0).toUpperCase() + schema.slice(1)}`;
+}
+
+/**
  * Edits the basic settings of a provider.
  */
 async function editProviderSettings(ctx, providerId) {
@@ -290,12 +311,14 @@ async function editProviderSettings(ctx, providerId) {
   if (!p) return;
 
   while (true) {
+    const schemaLabel = printSchemaInfo(p);
     const action = await select({
       message: `✏️ Edit "${ACCENT}${providerId}${C.reset}"`,
       options: [
         { value: "base_url", label: "Base URL", hint: p.base_url },
         { value: "api_key", label: "API Key", hint: p.api_key ? p.api_key.slice(0, 8) + "..." : "(not set)" },
         { value: "model", label: "Default Model", hint: p.model || "(not set)" },
+        { value: "api_schema", label: "API Schema", hint: schemaLabel },
         { value: "back", label: "🔙 Back" }
       ]
     });
@@ -336,6 +359,22 @@ async function editProviderSettings(ctx, providerId) {
         p.model = newModel;
         saveConfig(ctx.cfg);
         log.ok(`Default model updated for "${ACCENT}${providerId}${C.reset}"`);
+      }
+    }
+
+    if (action === "api_schema") {
+      const newSchema = await select({
+        message: `API Schema for "${ACCENT}${providerId}${C.reset}"`,
+        options: [
+          { value: "openai", label: "🔵 OpenAI-совместимая (GPT, DeepSeek, OpenRouter...)", hint: "messages[] /chat/completions" },
+          { value: "claude", label: "🟣 Anthropic Claude", hint: "system + messages /v1/messages" },
+          { value: "gemini", label: "🟢 Google Gemini", hint: "contents[] /v1beta/models:generateContent" },
+        ]
+      });
+      if (!isCancel(newSchema) && newSchema) {
+        p.api_schema = newSchema;
+        saveConfig(ctx.cfg);
+        log.ok(`API Schema for "${ACCENT}${providerId}${C.reset}" set to ${getSchemaLabel(newSchema)}`);
       }
     }
   }
