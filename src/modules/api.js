@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import { log, ACCENT, TEXT_DIM, MUTED } from "./ui.js";
 import { mcpManager } from "./mcp/manager.js";
+import { sanitizeToolCallsForApi } from "./images.js";
 
 // ─── API Schema Types ───────────────────────────────────────────────
 
