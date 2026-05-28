@@ -25,6 +25,65 @@ const ALL_TOOLS = [
   { name: "ci_pipeline", description: "Manage CI/CD. Actions: status (list workflows), generate (create GitHub Actions), heal (auto-fix failing tests)", parameters: { type: "object", properties: { action: { type: "string", enum: ["status", "generate", "heal"], description: "Allowed: status, generate, heal" }, name: { type: "string" }, description: { type: "string" } }, required: ["action"] } }
 ];
 
+/**
+ * Merges custom values from active provider config into API request options.
+ * Applies custom headers, body parameters, and query parameters.
+ * @param {Object} cfg - Application configuration
+ * @param {Object} requestOptions - { headers, body, url }
+ * @returns {Object} Modified request options { headers, body, url }
+ */
+function applyCustomValues(cfg, requestOptions) {
+  const { headers = {}, body = {}, url = "" } = requestOptions;
+  
+  // Resolve current provider's custom values
+  const activeProviderId = cfg.active_provider;
+  const provider = activeProviderId ? cfg.providers?.[activeProviderId] : null;
+  const customValues = provider?.custom_values || {};
+  
+  // Merge custom headers
+  const mergedHeaders = { ...headers };
+  if (customValues.headers && typeof customValues.headers === "object" && !Array.isArray(customValues.headers)) {
+    for (const [key, value] of Object.entries(customValues.headers)) {
+      mergedHeaders[key] = String(value);
+    }
+  }
+  
+  // Merge custom body parameters with smart type casting
+  const mergedBody = { ...body };
+  if (customValues.body_params && typeof customValues.body_params === "object" && !Array.isArray(customValues.body_params)) {
+    for (const [key, value] of Object.entries(customValues.body_params)) {
+      if (typeof value === "string") {
+        // Auto-cast common types
+        if (value === "true") { mergedBody[key] = true; continue; }
+        if (value === "false") { mergedBody[key] = false; continue; }
+        if (value === "null") { mergedBody[key] = null; continue; }
+        // Try numeric
+        if (/^-?\d+(\.\d+)?$/.test(value.trim())) { mergedBody[key] = Number(value); continue; }
+        // Try JSON for arrays/objects
+        if ((value.startsWith("{") && value.endsWith("}")) || (value.startsWith("[") && value.endsWith("]"))) {
+          try { mergedBody[key] = JSON.parse(value); continue; } catch {}
+        }
+      }
+      mergedBody[key] = value;
+    }
+  }
+  
+  // Append custom query parameters to URL
+  let finalUrl = url;
+  if (customValues.query_params && typeof customValues.query_params === "object" && !Array.isArray(customValues.query_params)) {
+    const queryEntries = Object.entries(customValues.query_params).filter(([_, v]) => v !== undefined && v !== null);
+    if (queryEntries.length > 0) {
+      const separator = url.includes("?") ? "&" : "?";
+      const queryString = queryEntries
+        .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`)
+        .join("&");
+      finalUrl = url + separator + queryString;
+    }
+  }
+  
+  return { headers: mergedHeaders, body: mergedBody, url: finalUrl };
+}
+
 // RPM Limiter for NVIDIA NIM API
 class RPMRateLimiter {
   constructor(requestsPerMinute = 30) {
