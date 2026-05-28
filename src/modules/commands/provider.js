@@ -409,11 +409,15 @@ export const handleProvider = async (ctx, input) => {
   }
 
   while (true) {
-    const options = Object.keys(providers).map(id => ({
-      value: id,
-      label: id,
-      hint: `${id === active ? SUCCESS(" (active)") : ""} ${providers[id].base_url}`
-    }));
+    const options = Object.keys(providers).map(id => {
+      const p = providers[id];
+      const schemaIcon = { openai: "🔵", claude: "🟣", gemini: "🟢" }[p.api_schema] || "🔵";
+      return {
+        value: id,
+        label: id,
+        hint: `${id === active ? SUCCESS(" (active)") : ""} ${schemaIcon} ${p.base_url}`
+      };
+    });
 
     options.push({ value: "add", label: "➕ Add New Provider", hint: "Configure a new API endpoint" });
     if (Object.keys(providers).length > 0) {
@@ -495,10 +499,22 @@ async function addNewProvider(ctx, providers) {
   });
   if (isCancel(model)) return;
 
+  // Ask for API schema
+  const apiSchema = await select({
+    message: "API Schema (формат запросов)",
+    options: [
+      { value: "openai", label: "🔵 OpenAI-совместимая (GPT, DeepSeek, OpenRouter, Groq...)", hint: "Рекомендуется для большинства" },
+      { value: "claude", label: "🟣 Anthropic Claude", hint: "api.anthropic.com" },
+      { value: "gemini", label: "🟢 Google Gemini", hint: "generativelanguage.googleapis.com" },
+    ]
+  });
+  if (isCancel(apiSchema)) return;
+
   providers[id] = {
     base_url: baseUrl,
     api_key: apiKey,
     model: model,
+    api_schema: apiSchema,
     custom_values: {
       headers: {},
       body_params: {},
