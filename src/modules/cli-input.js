@@ -171,7 +171,7 @@ const readMultilineInput = (promptTitle) => new Promise(resolve => {
    * Perform a full redraw and update rows count.
    */
   function refresh() {
-    rows = redraw(promptPrefix, buffer, cursor, rows, cols);
+    rows = redraw(promptPrefix, buffer, cursor, cols);
   }
 
   const onKey = (str, key = {}) => {
