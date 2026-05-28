@@ -71,6 +71,7 @@ const C = {
 
 /**
  * Default theme hex colors — used as fallback and initial values.
+ * These match the original hardcoded colors from earlier versions.
  */
 const DEFAULT_THEME_COLORS = {
   accent: "#CC7832",
@@ -96,7 +97,8 @@ const DEFAULT_THEME_COLORS = {
 // Active theme colors — initially set to defaults
 let _themeColors = { ...DEFAULT_THEME_COLORS };
 
-// Reassignable color exports (ES modules have live bindings)
+// Reassignable color exports (ES modules have live bindings —
+// any module importing these will see changes after applyTheme())
 let ACCENT    = color(_themeColors.accent);
 let ACCENT2   = color(_themeColors.accent2);
 let ACCENT3   = color(_themeColors.accent3);
@@ -121,7 +123,7 @@ let AI_GRADIENT   = gradient([_themeColors.gradientStart, _themeColors.gradientE
 
 /**
  * Rebuild all theme-dependent exports from a colors object.
- * Called when the theme changes (via applyTheme or setActiveTheme).
+ * Called when the theme changes (via applyTheme).
  * @param {Object} colors - Color hex map (same keys as DEFAULT_THEME_COLORS)
  */
 function _rebuildTheme(colors) {
@@ -168,7 +170,8 @@ function _initMarked() {
 
 /**
  * Apply a full theme colors object (e.g. from themes.json).
- * @param {Object} colors - Color hex map
+ * All exported color constants (ACCENT, SUCCESS, etc.) are updated live.
+ * @param {Object} colors - Color hex map (same keys as DEFAULT_THEME_COLORS)
  */
 function applyTheme(colors) {
   _themeColors = { ...DEFAULT_THEME_COLORS, ...colors };
@@ -181,54 +184,6 @@ function applyTheme(colors) {
  */
 function getActiveThemeColors() {
   return { ..._themeColors };
-}
-
-/**
- * Load and apply a theme by name from themes.json.
- * Falls back to "default" if the theme is not found.
- * @param {string} themeName - Theme identifier (e.g. "nord", "dracula")
- */
-function setActiveTheme(themeName) {
-  let colors = { ...DEFAULT_THEME_COLORS };
-  try {
-    const { getThemeColors } = requireOrImportTheme();
-    const themeColors = getThemeColors(themeName);
-    colors = { ...colors, ...themeColors };
-  } catch {}
-  applyTheme(colors);
-}
-
-/**
- * Helper to lazily import the theme module (avoid circular deps).
- */
-function requireOrImportTheme() {
-  // Dynamic import to break potential circular dependency
-  return { getThemeColors: (name) => {
-    try {
-      const fs = requireNodeFs();
-      const pathMod = requireNodePath();
-      // Try reading themes.json directly
-      const THEMES_PATHS = [
-        pathMod.resolve(process.cwd(), "themes.json"),
-        pathMod.resolve(new URL('.', import.meta.url).pathname, "../../themes.json"),
-      ];
-      for (const p of THEMES_PATHS) {
-        if (fs.existsSync(p)) {
-          const data = JSON.parse(fs.readFileSync(p, "utf-8"));
-          if (data[name]?.colors) return data[name].colors;
-        }
-      }
-    } catch {}
-    return {};
-  }};
-}
-
-function requireNodeFs() {
-  return { existsSync: (p) => { try { return !!process["binding"]?.("fs"); } catch { return false; } } };
-}
-
-function requireNodePath() {
-  return { resolve: (...parts) => parts.join("/") };
 }
 
 // Initial marked initialization
@@ -368,5 +323,7 @@ export {
   MEOW_GRADIENT, AI_GRADIENT,
   box, table, list, stripAnsi,
   progressBar, colorDiff,
-  Spinner, log, renderMD, gradient
+  Spinner, log, renderMD, gradient,
+  DEFAULT_THEME_COLORS,
+  applyTheme, getActiveThemeColors
 };
