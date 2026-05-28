@@ -367,7 +367,7 @@ const readMultilineInput = (promptTitle) => new Promise(resolve => {
             process.stdout.write(promptPrefix + styledBuffer(buffer, buffer.startsWith("/")));
 
             // Recalculate rows after re-printing
-            rows = Math.floor((prefixLen + buffer.length) / cols) + 1;
+            rows = Math.ceil((prefixLen + buffer.length) / cols);
             // Reposition cursor
             const cursorPos = prefixLen + cursor;
             const cRow = Math.floor(cursorPos / cols);
