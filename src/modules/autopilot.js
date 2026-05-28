@@ -324,6 +324,12 @@ class RecoveryStrategy {
     return /429|rate|500|502|503|timeout|ECONNRESET|fetch failed|socket/i.test(msg);
   }
 
+  /** @returns {boolean} True if the error is a tool call validation error. */
+  isToolCallValidationError(error) {
+    const msg = error.message || String(error);
+    return /tool_calls.*must be followed|insufficient tool messages|tool_call_id/i.test(msg);
+  }
+
   /** @returns {string} Recovery hint for the user/log. */
   getRecoveryHint(error) {
     const msg = error.message || String(error);
@@ -331,6 +337,7 @@ class RecoveryStrategy {
     if (/500|502|503/i.test(msg))           return "Server error — retrying";
     if (/timeout/i.test(msg))               return "Timeout — retrying";
     if (/context.?length|token/i.test(msg)) return "Context overflow — compressing";
+    if (this.isToolCallValidationError(error)) return "Broken tool call sequence — sanitizing";
     return "Unknown error — recovering";
   }
 
