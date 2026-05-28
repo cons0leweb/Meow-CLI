@@ -35,7 +35,7 @@ function getApiSchema(cfg) {
  */
 function buildSchemaRequest(messages, cfg, options = {}) {
   const schema = getApiSchema(cfg);
-  const profile = cfg.profiles[cfg.profile] || cfg.profiles.default;
+  const profile = (cfg.profile && cfg.profiles?.[cfg.profile]) || cfg.profiles?.default || {};
 
   switch (schema) {
     case API_SCHEMA.CLAUDE:
