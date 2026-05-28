@@ -289,6 +289,8 @@ const I18N = {
     cmd_stats: "Show status",
     cmd_optimize: "Configure prompt optimizer",
     cmd_plugin: "Manage plugins",
+    cmd_version: "Show version & check for updates",
+    cmd_update: "Check for updates and show upgrade instructions",
     cmd_help: "This help",
     cmd_exit: "Quit",
     cmd_trust: "Check or grant trust to current repository",
