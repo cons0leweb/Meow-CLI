@@ -181,6 +181,7 @@ const HELP_SECTIONS = (cfg) => [
       ["/whoami",            t(cfg, "cmd_whoami")],
       ["/mcp",               t(cfg, "cmd_mcp")],
       ["/lang <ru|en>",      "Switch UI language"],
+      ["/theme [name]",      t(cfg, "cmd_theme")],
       ["/config",            t(cfg, "cmd_config")],
       ["/saveconfig",        t(cfg, "cmd_saveconfig")],
       ["/git [on|off]",      t(cfg, "cmd_git")],
