@@ -519,6 +519,9 @@ class Autopilot {
     this.stallThreshold = 3;
     this.nudgeCount = 0;
     this.maxNudges = 5;
+
+    /** @type {CoordinationChannel|null} Coordination channel for user messages */
+    this._channel = null;
   }
 
   /** Aborts the current autopilot run. */
