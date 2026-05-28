@@ -639,12 +639,16 @@ class Autopilot {
     if (this.contextManager.needsCriticalCompression(this.messages)) {
       log.warn("Context critical — compressing");
       this.messages = this.contextManager.compress(this.messages);
+      // Sanitize after compression to fix any broken tool call sequences
+      this.messages = sanitizeToolCallsForApi(this.messages);
       this._log("compression", `Critical #${this.contextManager.compressions}`);
       return true;
     }
     if (this.contextManager.needsCompression(this.messages)) {
       log.dim("Context growing — compressing");
       this.messages = this.contextManager.compress(this.messages);
+      // Sanitize after compression to fix any broken tool call sequences
+      this.messages = sanitizeToolCallsForApi(this.messages);
       this._log("compression", `#${this.contextManager.compressions}`);
       return true;
     }
