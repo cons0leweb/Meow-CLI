@@ -12,6 +12,7 @@ import { executeTool, runShell } from "./tools.js";
 import { getTrustManager, TRUST_LEVEL } from "./trust.js";
 import { PromptOptimizer } from "./smart/prompt-optimizer.js";
 import { sanitizeToolCallsForApi } from "./images.js";
+import { CoordinationChannel, formatCoordinationMessage } from "./autopilot-channel.js";
 
 /** @type {Object} Autopilot execution phases */
 const PHASE = {
