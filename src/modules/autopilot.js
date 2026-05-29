@@ -510,8 +510,6 @@ class Autopilot {
     this.stallThreshold = 3;
     this.nudgeCount = 0;
     this.maxNudges = 5;
-
-
   }
 
   /** Aborts the current autopilot run. */
