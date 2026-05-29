@@ -655,7 +655,7 @@ export default function App() {
                               transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
                               className="overflow-hidden space-y-1.5"
                             >
-                              {preConfiguredPlanSteps.map((step, idx) => (
+                              {planSteps.map((step, idx) => (
                                 <motion.div 
                                   key={idx}
                                   initial={{ opacity: 0, x: -6 }}
