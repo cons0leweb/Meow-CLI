@@ -96,3 +96,51 @@ body {
   -webkit-background-clip: text;
   animation: text-shimmer-move 3s linear infinite;
 }
+
+/* ─── Working Shimmer (Agent Thinking Indicator) ─── */
+@keyframes working-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+@keyframes working-dot-pulse {
+  0%, 20% { opacity: 0.2; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1.2); }
+  80%, 100% { opacity: 0.2; transform: scale(0.8); }
+}
+
+@keyframes working-glow {
+  0%, 100% { box-shadow: 0 0 8px rgba(168, 85, 247, 0.08), 0 0 20px rgba(168, 85, 247, 0.03); }
+  50% { box-shadow: 0 0 16px rgba(168, 85, 247, 0.15), 0 0 40px rgba(168, 85, 247, 0.05); }
+}
+
+@keyframes working-border-shift {
+  0% { border-color: rgba(168, 85, 247, 0.15); }
+  50% { border-color: rgba(168, 85, 247, 0.35); }
+  100% { border-color: rgba(168, 85, 247, 0.15); }
+}
+
+.agent-working-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(168, 85, 247, 0.08) 0%,
+    rgba(168, 85, 247, 0.02) 25%,
+    rgba(168, 85, 247, 0.12) 50%,
+    rgba(168, 85, 247, 0.02) 75%,
+    rgba(168, 85, 247, 0.08) 100%
+  );
+  background-size: 200% 100%;
+  animation: working-shimmer 2.5s ease-in-out infinite;
+}
+
+.agent-working-glow {
+  animation: working-glow 2s ease-in-out infinite;
+}
+
+.agent-working-border {
+  animation: working-border-shift 3s ease-in-out infinite;
+}
+
+.agent-dot:nth-child(1) { animation: working-dot-pulse 1.4s ease-in-out infinite; animation-delay: 0s; }
+.agent-dot:nth-child(2) { animation: working-dot-pulse 1.4s ease-in-out infinite; animation-delay: 0.2s; }
+.agent-dot:nth-child(3) { animation: working-dot-pulse 1.4s ease-in-out infinite; animation-delay: 0.4s; }
