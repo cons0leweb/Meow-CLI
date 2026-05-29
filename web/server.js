@@ -504,25 +504,35 @@ app.post('/api/chat/stream', async (req, res) => {
           if (result.usage) usage = result.usage;
         }
         
-        // ─── FIX: If no text content but there are tool calls, generate fallback ───
-        if (!fullContent && toolCalls && toolCalls.length > 0) {
-          const toolDescriptions = toolCalls.map(tc => {
+        // ─── Send structured tool_call events (instead of ugly markdown fallback) ───
+        if (toolCalls && toolCalls.length > 0) {
+          for (const tc of toolCalls) {
             const name = tc.function?.name || tc.name || 'unknown';
-            let args = '';
+            let args = {};
             try {
-              const parsed = typeof tc.function?.arguments === 'string' 
+              args = typeof tc.function?.arguments === 'string' 
                 ? JSON.parse(tc.function.arguments) 
                 : (tc.function?.arguments || tc.input || {});
-              args = JSON.stringify(parsed, null, 2);
             } catch {
-              args = String(tc.function?.arguments || '');
+              args = { raw: String(tc.function?.arguments || '') };
             }
-            return `🔧 **${name}**\n\`\`\`json\n${args}\n\`\`\``;
-          }).join('\n\n');
-          
-          fullContent = `⚡ **AI вызвал инструменты для выполнения задачи:**\n\n${toolDescriptions}\n\n_Ожидайте результат выполнения..._`;
-          
-          // Also send the generated content as a regular chunk so the client streams it
+            
+            // Map tool type for frontend ActivityTimeline
+            const toolType = toolToActivityType(name);
+            
+            res.write(`data: ${JSON.stringify({ 
+              type: 'tool_call', 
+              id: tc.id || `tc-${Date.now()}`,
+              name, 
+              args,
+              toolType
+            })}\n\n`);
+          }
+        }
+        
+        // If no text content but tools were called, set a clean message
+        if (!fullContent && toolCalls && toolCalls.length > 0) {
+          fullContent = 'Выполняю задачу... использую инструменты для работы с файлами и системой.';
           res.write(`data: ${JSON.stringify({ type: 'content', content: fullContent })}\n\n`);
         }
         
