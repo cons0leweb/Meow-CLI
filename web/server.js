@@ -578,6 +578,22 @@ app.post('/api/chat/stream', async (req, res) => {
         // Execute tools and push results
         allToolCalls.push(...toolCalls);
 
+        // Push assistant message with tool calls BEFORE tool results
+        messages.push({
+          role: 'assistant',
+          content: msg.content || '',
+          tool_calls: toolCalls.map(tc => ({
+            id: tc.id,
+            type: 'function',
+            function: {
+              name: tc.function?.name || tc.name || '',
+              arguments: typeof tc.function?.arguments === 'string'
+                ? tc.function.arguments
+                : JSON.stringify(tc.function?.arguments || {})
+            }
+          }))
+        });
+
         for (const tc of toolCalls) {
           const name = tc.function?.name || tc.name || 'unknown';
           let args = {};
@@ -629,22 +645,6 @@ app.post('/api/chat/stream', async (req, res) => {
             content: toolResult || ''
           });
         }
-
-        // Push assistant message with tool calls
-        messages.push({
-          role: 'assistant',
-          content: msg.content || '',
-          tool_calls: toolCalls.map(tc => ({
-            id: tc.id,
-            type: 'function',
-            function: {
-              name: tc.function?.name || tc.name || '',
-              arguments: typeof tc.function?.arguments === 'string'
-                ? tc.function.arguments
-                : JSON.stringify(tc.function?.arguments || {})
-            }
-          }))
-        });
       }
 
       res.write(`data: ${JSON.stringify({
