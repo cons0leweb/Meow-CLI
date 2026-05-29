@@ -261,6 +261,10 @@ export default function App() {
           setThinkingState('idle');
           triggerNotification('Stream error: ' + error);
         },
+        (toolCall) => {
+          // Keep showing "Working..." during tool execution
+          setThinkingState('thinking');
+        },
       );
     } catch (err) {
       console.error('Failed to start stream:', err);
