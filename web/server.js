@@ -720,8 +720,8 @@ app.put('/api/cwd', (req, res) => {
       try {
         const data = sessionManager.load(currentSessionId);
         if (data) {
-          data.cwd = newCwd;
-          sessionManager.save({ ...data, cwd: newCwd }, currentSessionId);
+          sessionManager.sessionId = currentSessionId;
+          sessionManager.save({ ...data, cwd: newCwd });
         }
       } catch {}
     }
