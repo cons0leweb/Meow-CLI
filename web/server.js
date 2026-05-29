@@ -17,7 +17,7 @@ const __dirname = path.dirname(__filename);
 // ─── Import Meow CLI Core Modules ───────────────────────────────────
 const MEOW_CLI_SRC = path.join(__dirname, '..', 'src', 'modules');
 
-let configModule, persistenceModule, sessionsModule, costTrackerModule, authModule, apiModule, autopilotModule;
+let configModule, persistenceModule, sessionsModule, costTrackerModule, authModule, apiModule, autopilotModule, toolsModule;
 
 async function loadModules() {
   try {
