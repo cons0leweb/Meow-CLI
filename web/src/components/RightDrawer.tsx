@@ -69,49 +69,14 @@ export function RightDrawer({
               {/* ─── Case A: CHANGES DIFFERENTIAL SHEETS ───────── */}
               {activeSheet === 'changes' && (
                 <div className="space-y-4">
-                  
                   <div className="p-4 bg-zinc-900/40 border border-zinc-900 rounded-xl space-y-1">
-                    <span className="text-[10px] text-zinc-500 uppercase tracking-widest font-mono font-bold">Staged Changesets</span>
-                    <p className="text-xs text-zinc-350 font-medium">Branch: feature/concurrent-caches</p>
+                    <span className="text-[10px] text-zinc-500 uppercase tracking-widest font-mono font-bold">Changes</span>
+                    <p className="text-xs text-zinc-350 font-medium">Track file modifications from autopilot sessions</p>
                   </div>
 
-                  {/* File deltas */}
-                  <div className="bg-zinc-950 border border-zinc-900 rounded-xl p-3.5 space-y-3">
-                    <div className="text-[10px] uppercase font-bold text-zinc-550">File System Modifications</div>
-                    
-                    <div className="flex items-center justify-between text-xs py-1 text-zinc-300">
-                      <span className="font-mono">src/core/autopilot.ts</span>
-                      <span className="font-mono text-[10px] text-emerald-500">+18 -7 lines</span>
-                    </div>
-                    
-                    <div className="flex items-center justify-between text-xs py-1 text-zinc-350">
-                      <span className="font-mono">package.json</span>
-                      <span className="font-mono text-[10px] text-emerald-500">+3 -0 lines</span>
-                    </div>
-                  </div>
-
-                  {/* Unified visual Diff */}
-                  <div className="rounded-xl border border-zinc-900 bg-zinc-950 overflow-hidden font-mono text-[11px] leading-relaxed">
-                    <div className="px-3 py-2 bg-zinc-900/60 border-b border-zinc-900 text-zinc-400 text-[10px] flex justify-between">
-                      <span>diff --git a/src/core/autopilot.ts</span>
-                      <span className="text-emerald-500">Proposed</span>
-                    </div>
-                    
-                    <div className="p-4 space-y-2 select-text overflow-x-auto">
-                      <div className="bg-red-950/20 text-red-400 p-2 border-l border-red-800 rounded">
-                        <span className="text-red-600 font-bold select-none mr-2">-</span>
-                        <span>const data = fs.readFileSync(path, 'utf8');</span>
-                      </div>
-                      
-                      <div className="bg-emerald-950/20 text-emerald-400 p-2 border-l border-emerald-600 rounded">
-                        <span className="text-emerald-500 font-bold select-none mr-2">+</span>
-                        <span>const guard = await lockQueue.acquire();</span>
-                      </div>
-                      <div className="bg-emerald-950/20 text-emerald-400 p-2 border-l border-emerald-600 rounded">
-                        <span className="text-emerald-500 font-bold select-none mr-2">+</span>
-                        <span>const data = await fs.promises.readFile(path, 'utf8');</span>
-                      </div>
-                    </div>
+                  <div className="bg-zinc-950 border border-zinc-900 rounded-xl p-3.5 text-xs text-zinc-500">
+                    <p>File changes will appear here when autopilot makes modifications.</p>
+                    <p className="mt-2 text-[10px] text-zinc-600">Run an autopilot task to see tracked changes.</p>
                   </div>
                 </div>
               )}
