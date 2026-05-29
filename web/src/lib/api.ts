@@ -161,6 +161,52 @@ export const api = {
 
   // ─── CWD ───────────────────────────────────────────────────────
   getCwd: () => request<{ cwd: string; dataDir: string }>('/cwd'),
+  setCwd: (cwd: string) =>
+    request<{ success: boolean; cwd: string; message: string }>('/cwd', {
+      method: 'PUT',
+      body: JSON.stringify({ cwd }),
+    }),
+
+  // ─── Files (Tool Bridge) ───────────────────────────────────────
+  readFile: (path: string) =>
+    request<{ path: string; size: number; content: string; truncated: boolean }>(`/files/read?path=${encodeURIComponent(path)}`),
+  writeFile: (path: string, content: string) =>
+    request<{ success: boolean; path: string; size: number }>('/files/write', {
+      method: 'POST',
+      body: JSON.stringify({ path, content }),
+    }),
+  listFiles: (dirPath?: string) =>
+    request<{ path: string; files: Array<{ name: string; isDirectory: boolean; isFile: boolean; size: number }> }>('/files/list', {
+      method: 'POST',
+      body: JSON.stringify({ path: dirPath || '.' }),
+    }),
+
+  // ─── Shell (Tool Bridge) ───────────────────────────────────────
+  execShell: (command: string, timeout?: number) =>
+    request<{ stdout: string; stderr: string; exitCode: number; error?: string }>('/shell/exec', {
+      method: 'POST',
+      body: JSON.stringify({ command, timeout }),
+    }),
+
+  // ─── Autopilot ─────────────────────────────────────────────────
+  executeAutopilot: (task: string, model?: string) =>
+    request<{ success: boolean; message: string; task: string; model: string; maxIterations: number }>('/autopilot/execute', {
+      method: 'POST',
+      body: JSON.stringify({ task, model }),
+    }),
+  getAutopilotStatus: () =>
+    request<{ running: boolean; hasInstance: boolean; phase: string; iterations: number; errors: number }>('/autopilot/status'),
+  cancelAutopilot: () =>
+    request<{ success: boolean; message: string }>('/autopilot/cancel', {
+      method: 'POST',
+    }),
+
+  // ─── Session Save ──────────────────────────────────────────────
+  saveSession: (id: string, data: { messages?: any[]; model?: string; profile?: string }) =>
+    request<{ success: boolean; message: string }>(`/sessions/${encodeURIComponent(id)}/save`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
 };
 
 // ─── Response Types ─────────────────────────────────────────────────
