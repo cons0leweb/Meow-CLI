@@ -54,6 +54,11 @@ async function loadModules() {
     autopilotModule = await import(path.join(MEOW_CLI_SRC, 'autopilot.js'));
     console.log('  ✓ Loaded module: autopilot');
   } catch (e) { console.error('  ✗ Failed autopilot:', e.message); }
+
+  try {
+    toolsModule = await import(path.join(MEOW_CLI_SRC, 'tools.js'));
+    console.log('  ✓ Loaded module: tools');
+  } catch (e) { console.error('  ✗ Failed tools:', e.message); }
 }
 
 await loadModules();
