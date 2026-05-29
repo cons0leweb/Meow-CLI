@@ -4,7 +4,7 @@ import { motion } from 'motion/react';
 import { SessionMeta } from '../types';
 
 interface SidebarProps {
-  currentSession: string;
+  currentSession: string | null;
   onSetCurrentSession: (id: string) => void;
   sessions: any[];
   userInfo: any;
