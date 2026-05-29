@@ -140,6 +140,13 @@ export default function App() {
         }
       }
 
+      // Load CWD
+      try {
+        const cwdData = await api.getCwd();
+        setCurrentCwd(cwdData.cwd);
+        setCwdInput(cwdData.cwd);
+      } catch {}
+      
       // Try to load theme
       try {
         const themeData = await api.getTheme();
