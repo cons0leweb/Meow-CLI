@@ -242,7 +242,23 @@ export function ChatContainer({
                       <div className="markdown-body text-zinc-300 selection:bg-zinc-800/80 space-y-2 text-left leading-relaxed">
                         <Markdown
                           components={{
-                            code: ({ children }) => <CodeBlock>{children}</CodeBlock>,
+                            // ── Блочный код (```...```) → красивый блок с рамкой ──
+                            pre: ({ children }) => <>{children}</>,
+                            // ── Инлайн-код (`...`) → компактный тёмный чип ──
+                            code: ({ className, children }) => {
+                              // Если это код внутри <pre> (блочный) — используем CodeBlock
+                              // Определяем по className: remark добавляет class "language-*" для блоков
+                              const isBlock = className?.startsWith('language-');
+                              if (isBlock) {
+                                return <CodeBlock>{children}</CodeBlock>;
+                              }
+                              // Иначе — компактный инлайн-код
+                              return (
+                                <code className="px-1.5 py-0.5 rounded-md bg-zinc-900/80 border border-zinc-800/60 text-zinc-200 font-mono text-[11px]">
+                                  {children}
+                                </code>
+                              );
+                            },
                             ul: ({ children }) => <ul className="list-disc pl-5 my-2 space-y-1 text-zinc-300">{children}</ul>,
                             ol: ({ children }) => <ol className="list-decimal pl-5 my-2 space-y-1 text-zinc-300">{children}</ol>,
                             h1: ({ children }) => <h1 className="text-sm font-bold text-white mt-3 mb-1.5">{children}</h1>,
