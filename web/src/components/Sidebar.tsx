@@ -13,6 +13,7 @@ interface SidebarProps {
   onCreateNewChat: () => void;
   onDeleteSession: (id: string) => void;
   onNotify: (msg: string) => void;
+  cwd?: string;
 }
 
 export function Sidebar({
