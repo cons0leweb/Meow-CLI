@@ -876,13 +876,6 @@ class Autopilot {
           break;
         }
 
-        // Check for user coordination messages after text response
-        const coordInjected = this._injectCoordinationMessages();
-        if (coordInjected > 0) {
-          // Skip nudging this iteration — user sent a message, continue loop
-          continue;
-        }
-
         const itersSinceTools = this.iteration - this.lastToolCallIteration;
         if (itersSinceTools >= 2) {
           const nudge = this._generateNudge();
