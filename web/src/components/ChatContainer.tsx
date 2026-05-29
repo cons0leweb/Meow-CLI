@@ -460,7 +460,7 @@ export function ChatContainer({
             )}
           </AnimatePresence>
 
-          {/* ─── Case D: Blur streaming indicator ────────────── */}
+          {/* ─── Case D: Streaming indicator ─────────────────── */}
           <AnimatePresence>
             {thinkingState === 'streaming' && (
               <motion.div 
@@ -470,12 +470,22 @@ export function ChatContainer({
                 transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
                 className="flex gap-4 justify-start"
               >
-                <div className="w-8 h-8 rounded-lg bg-zinc-900 border border-zinc-805 flex items-center justify-center shrink-0">
-                  <Sparkles className="w-4 h-4 text-[#ff7043]" />
+                <div className="relative shrink-0">
+                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-zinc-900 to-zinc-950 border border-zinc-800/80 flex items-center justify-center relative z-10">
+                    <Sparkles className="w-3.5 h-3.5 text-emerald-400/80" />
+                  </div>
+                  <div className="absolute -inset-1 rounded-lg bg-emerald-500/8 blur-sm" />
                 </div>
 
-                <div className="flex-1 max-w-md bg-[#0d0d11]/80 border border-zinc-900 rounded-xl p-4">
-                  <span className="text-xs text-zinc-450 font-medium">Resolving workspace parameters files...</span>
+                <div className="flex-1 max-w-md rounded-xl p-4 border border-emerald-500/10 bg-gradient-to-r from-[#0d0d11]/60 via-[#0d0d11]/30 to-[#0d0d11]/60">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-emerald-400/70 font-mono font-semibold">⏺ Streaming response...</span>
+                    <span className="flex gap-0.5">
+                      <span className="w-1 h-1 rounded-full bg-emerald-400/60 animate-pulse" />
+                      <span className="w-1 h-1 rounded-full bg-emerald-400/60 animate-pulse" style={{ animationDelay: '0.3s' }} />
+                      <span className="w-1 h-1 rounded-full bg-emerald-400/60 animate-pulse" style={{ animationDelay: '0.6s' }} />
+                    </span>
+                  </div>
                 </div>
               </motion.div>
             )}
