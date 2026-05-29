@@ -360,6 +360,9 @@ export default function App() {
       [currentSession]: updatedMessages,
     }));
     setComposerVal('');
+    
+    // Auto-save session after user message
+    saveCurrentSession(updatedMessages);
     setThinkingState('thinking');
     setStreamingContent('');
 
