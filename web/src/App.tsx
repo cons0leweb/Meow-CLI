@@ -758,6 +758,54 @@ export default function App() {
                 );
               })}
 
+              {/* ─── BEAUTIFUL TOOL ACTIVITY TIMELINE ─── */}
+              <AnimatePresence>
+                {toolActivityItems.length > 0 && thinkingState === 'streaming' && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -8, filter: 'blur(4px)' }}
+                    animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+                    exit={{ opacity: 0, y: -4, filter: 'blur(4px)' }}
+                    transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+                    className="flex gap-4 justify-start"
+                  >
+                    <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center shrink-0">
+                      <Cpu className="w-4 h-4 text-amber-500" />
+                    </div>
+                    <div className="flex-1 min-w-0 max-w-lg">
+                      <div className="text-[9px] uppercase tracking-widest font-mono text-zinc-500 font-semibold mb-3 flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                        <span>Working</span>
+                      </div>
+                      <ActivityTimeline items={toolActivityItems} />
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* ─── COMPLETED TOOL ACTIVITY (idle/after streaming) ─── */}
+              <AnimatePresence>
+                {toolActivityItems.length > 0 && thinkingState === 'idle' && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -8, filter: 'blur(4px)' }}
+                    animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+                    exit={{ opacity: 0, y: -4 }}
+                    transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+                    className="flex gap-4 justify-start"
+                  >
+                    <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center shrink-0">
+                      <Check className="w-4 h-4 text-emerald-500" />
+                    </div>
+                    <div className="flex-1 min-w-0 max-w-lg">
+                      <div className="text-[9px] uppercase tracking-widest font-mono text-emerald-500 font-semibold mb-3 flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                        <span>Completed</span>
+                      </div>
+                      <ActivityTimeline items={toolActivityItems.map(item => ({ ...item, status: 'success' as ActivityStatus }))} />
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
               {/* CLAUDE SHIMMER THINKING BUBBLE (Scenario 1) */}
               <AnimatePresence>
                 {thinkingState === 'thinking' && (
