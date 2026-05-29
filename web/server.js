@@ -764,6 +764,138 @@ app.post('/api/files/list', (req, res) => {
   }
 });
 
+// ─── Autopilot Routes ───────────────────────────────────────────────
+let autopilotInstance = null;
+let autopilotRunning = false;
+
+app.post('/api/autopilot/execute', async (req, res) => {
+  try {
+    const { task, model } = req.body;
+    if (!task) return res.status(400).json({ error: 'task required' });
+    
+    const cfg = loadConfig();
+    if (!cfg.api_key) return res.status(400).json({ error: 'API key not configured' });
+    
+    // Import autopilot module
+    let AutopilotRunner;
+    try {
+      const autopilotModule = await import(path.join(MEOW_CLI_SRC, 'autopilot.js'));
+      AutopilotRunner = autopilotModule.AutopilotRunner;
+    } catch (e) {
+      return res.status(500).json({ error: `Cannot load autopilot: ${e.message}` });
+    }
+    
+    if (!AutopilotRunner) {
+      return res.status(500).json({ error: 'Autopilot module not available' });
+    }
+    
+    const runner = new AutopilotRunner({
+      model: model || cfg.model,
+      config: cfg,
+      maxIterations: cfg.autopilot?.max_iterations || 50,
+      maxErrors: cfg.autopilot?.max_errors || 5,
+    });
+    
+    autopilotInstance = runner;
+    autopilotRunning = true;
+    
+    // Run in background - use SSE or just return initial status
+    res.json({ 
+      success: true, 
+      message: 'Autopilot started',
+      task,
+      model: model || cfg.model,
+      maxIterations: cfg.autopilot?.max_iterations || 50,
+    });
+    
+    // Execute async (non-blocking)
+    runner.run(task).catch(err => {
+      console.error('Autopilot error:', err.message);
+      autopilotRunning = false;
+    }).finally(() => {
+      autopilotRunning = false;
+    });
+  } catch (e) {
+    autopilotRunning = false;
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/autopilot/status', (req, res) => {
+  res.json({
+    running: autopilotRunning,
+    hasInstance: !!autopilotInstance,
+    phase: autopilotInstance?.phase || 'idle',
+    iterations: autopilotInstance?.iteration || 0,
+    errors: autopilotInstance?.errors || 0,
+  });
+});
+
+app.post('/api/autopilot/cancel', (req, res) => {
+  if (autopilotInstance && typeof autopilotInstance.cancel === 'function') {
+    autopilotInstance.cancel();
+  }
+  autopilotRunning = false;
+  res.json({ success: true, message: 'Autopilot cancelled' });
+});
+
+// ─── Session Save (explicit) ────────────────────────────────────────
+app.post('/api/sessions/:id/save', (req, res) => {
+  try {
+    const { id } = req.params;
+    const { messages, model, profile } = req.body;
+    
+    if (!sessionManager) {
+      return res.status(404).json({ error: 'No session manager' });
+    }
+    
+    const data = sessionManager.load(id) || {};
+    const saveData = {
+      ...data,
+      model: model || data.model || '',
+      profile: profile || data.profile || 'default',
+      messages: messages || data.messages || [],
+      messagesCount: (messages || data.messages || []).length,
+    };
+    
+    // Use internal save method
+    if (typeof sessionManager.save === 'function') {
+      sessionManager.save(saveData);
+    }
+    
+    res.json({ success: true, message: 'Session saved' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ─── Shell Command (Tool Bridge) ────────────────────────────────────
+app.post('/api/shell/exec', async (req, res) => {
+  try {
+    const { command, timeout } = req.body;
+    if (!command) return res.status(400).json({ error: 'command required' });
+    
+    const { execSync } = await import('child_process');
+    const maxTimeout = Math.min(timeout || 30000, 60000);
+    
+    const stdout = execSync(command, {
+      cwd: process.cwd(),
+      timeout: maxTimeout,
+      encoding: 'utf8',
+      maxBuffer: 1024 * 1024,
+    });
+    
+    res.json({ stdout, stderr: '', exitCode: 0 });
+  } catch (e) {
+    res.json({ 
+      stdout: e.stdout || '', 
+      stderr: e.stderr || e.message,
+      exitCode: e.status || 1,
+      error: e.message,
+    });
+  }
+});
+
 // ─── Auth ───────────────────────────────────────────────────────────
 app.get('/api/auth/status', (req, res) => {
   try {
