@@ -27,7 +27,6 @@ interface ChatContainerProps {
   onSetWorkedExpandedId: (id: string | null) => void;
   
   onInspectAction: (sheetKey: string, title: string) => void;
-  preConfiguredPlanSteps: Array<{ label: string; status: string }>;
 }
 
 // 1. Tool action styles and definitions representing the requested tools
