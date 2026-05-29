@@ -36,7 +36,15 @@ try {
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-console.log('DEBUG: Express app created, starting middleware setup...');
+console.log('DEBUG: Express app created');
+
+// TEST: Quick route test right after app creation
+app.get('/api/debug', (req, res) => {
+  console.log('DEBUG ROUTE HIT!');
+  res.json({ debug: 'working' });
+});
+
+console.log('DEBUG: Test route registered');
 
 // ─── Middleware ──────────────────────────────────────────────────────
 app.use(cors({ origin: ['http://localhost:3000', 'http://localhost:5173', 'http://127.0.0.1:3000', 'http://localhost:3001'], credentials: true }));
