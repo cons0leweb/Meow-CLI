@@ -91,69 +91,54 @@ export function RightDrawer({
                     <div className="bg-zinc-950 border border-zinc-900 rounded-xl p-3.5 space-y-2 text-xs">
                       <div className="flex justify-between items-center text-[11px]">
                         <span className="text-zinc-500 font-mono">Engine Model:</span>
-                        <span className="text-white font-mono bg-zinc-900 px-2 py-0.5 rounded border border-zinc-800">{apiStatus?.activeModel || 'gemini-2.0-flash'}</span>
+                        <span className="text-white font-mono bg-zinc-900 px-2 py-0.5 rounded border border-zinc-800">{apiStatus?.activeModel || 'not set'}</span>
                       </div>
                       <div className="flex justify-between items-center text-[11px]">
                         <span className="text-zinc-500 font-mono">Service Provider:</span>
-                        <span className="text-white font-mono bg-zinc-900 px-2 py-0.5 rounded border border-zinc-800 uppercase text-[10px]">{apiStatus?.activeProvider || 'google'}</span>
+                        <span className="text-white font-mono bg-zinc-900 px-2 py-0.5 rounded border border-zinc-800 uppercase text-[10px]">{apiStatus?.activeProvider || 'none'}</span>
                       </div>
                       <div className="flex justify-between items-center text-[11px]">
                         <span className="text-zinc-500 font-mono">Config Profile:</span>
                         <span className="text-white font-mono bg-zinc-900 px-2 py-0.5 rounded border border-zinc-800">{apiStatus?.activeProfile || 'default'}</span>
                       </div>
+                      <div className="flex justify-between items-center text-[11px]">
+                        <span className="text-zinc-500 font-mono">API Key:</span>
+                        <span className="text-white font-mono bg-zinc-900 px-2 py-0.5 rounded border border-zinc-800 text-[10px]">
+                          {apiStatus?.apiKeyConfigured ? '✓ Configured' : '✗ Missing'}
+                        </span>
+                      </div>
                     </div>
                   </div>
 
-                  {/* System Prompt */}
+                  {/* System Prompt from active profile */}
                   <div className="space-y-2">
-                    <div className="text-[10px] font-mono uppercase tracking-widest text-[#ff7043] font-bold">System Prompt Parameters</div>
+                    <div className="text-[10px] font-mono uppercase tracking-widest text-[#ff7043] font-bold">System Prompt</div>
                     <div className="p-3.5 bg-zinc-950 border border-zinc-900 rounded-xl font-mono text-[10px] text-zinc-400 leading-relaxed max-h-40 overflow-y-auto">
-                      "You are Meow Autonomous Core, a senior systems engineer. Minimize visual noise. Adhere to strict clean TypeScript limits. Eliminate telemetry clutter from outer rails."
+                      Active profile system prompt loaded from config.
                     </div>
                   </div>
 
                   {/* Active Workspace Files */}
                   <div className="space-y-2">
-                    <div className="text-[10px] font-mono uppercase tracking-widest text-zinc-500 font-bold">Workspace Repository Layer</div>
-                    
+                    <div className="text-[10px] font-mono uppercase tracking-widest text-zinc-500 font-bold">Workspace Files</div>
+
                     <div className="space-y-1 max-h-48 overflow-y-auto pr-1">
-                      {(projectFiles.length > 0 ? projectFiles : [
-                        'src/api/api.ts',
-                        'src/App.tsx',
-                        'package.json',
-                        'vite.config.ts'
-                      ]).map((fpath, idx) => (
+                      {projectFiles.length > 0 ? projectFiles.map((fpath, idx) => (
                         <div key={idx} className="flex items-center justify-between p-2 rounded-lg bg-zinc-950/40 text-xs border border-transparent hover:border-zinc-900 hover:bg-zinc-900/30 transition">
                           <span className="font-mono text-zinc-300 truncate pr-2">{fpath}</span>
                           <FileText className="w-3.5 h-3.5 text-zinc-650 shrink-0" />
                         </div>
-                      ))}
+                      )) : (
+                        <div className="text-xs text-zinc-500 p-2">No files loaded</div>
+                      )}
                     </div>
                   </div>
 
-                  {/* Learned Retained Memory */}
+                  {/* CWD */}
                   <div className="space-y-2">
-                    <div className="text-[10px] font-mono uppercase tracking-widest text-zinc-500 font-bold">Autonomous Memory Rules</div>
-                    
-                    {[
-                      'Avoid standard blocking loops synchronously to preserve CPU performance.',
-                      'Use concurrent mutex locks when writing logging variables to the file structure.',
-                      'Favor functional React hooks and motion layout transformations.'
-                    ].map((rule, idx) => (
-                      <div key={idx} className="p-3 bg-zinc-950 border border-zinc-900 rounded-xl text-xs text-zinc-400 leading-normal">
-                        {rule}
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Active Tools list */}
-                  <div className="space-y-2">
-                    <div className="text-[10px] font-mono uppercase tracking-widest text-zinc-500 font-bold">Authorized Integrations</div>
-                    <div className="grid grid-cols-2 gap-2 text-xs">
-                      <div className="p-2.5 bg-zinc-950 border border-zinc-900 rounded-lg text-zinc-500">view_file</div>
-                      <div className="p-2.5 bg-zinc-950 border border-zinc-900 rounded-lg text-zinc-500">patch_file</div>
-                      <div className="p-2.5 bg-zinc-950 border border-zinc-900 rounded-lg text-zinc-500">run_shell</div>
-                      <div className="p-2.5 bg-zinc-950 border border-zinc-900 rounded-lg text-zinc-500">grep</div>
+                    <div className="text-[10px] font-mono uppercase tracking-widest text-zinc-500 font-bold">Current Directory</div>
+                    <div className="p-3 bg-zinc-950 border border-zinc-900 rounded-xl text-xs text-zinc-400 font-mono truncate">
+                      {process.cwd()}
                     </div>
                   </div>
 
