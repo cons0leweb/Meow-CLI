@@ -191,6 +191,19 @@ export default function App() {
     } catch {}
   }, []);
 
+  // CWD change handler
+  const handleCwdChange = useCallback(async () => {
+    if (!cwdInput.trim()) return;
+    try {
+      const result = await api.setCwd(cwdInput.trim());
+      setCurrentCwd(result.cwd);
+      setEditingCwd(false);
+      triggerNotification(`CWD: ${result.message}`);
+    } catch (e: any) {
+      triggerNotification(`CWD error: ${e.message}`);
+    }
+  }, [cwdInput, triggerNotification]);
+
   // Trigger notification
   const triggerNotification = useCallback((msg: string) => {
     setShowNotification(msg);
