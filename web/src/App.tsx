@@ -3,11 +3,14 @@ import {
   Play, Pause, Check, Sparkles, X, User, Cpu, GitBranch, 
   HelpCircle, ChevronRight, CheckCircle2, ChevronDown, ListTodo, FileCode, Search,
   MessageSquare, Plus, Settings, Eye, FileText, Terminal, ArrowUpRight, Code, Shield, RotateCcw,
-  Globe, Key, Zap, Trash2, DollarSign, Clock, RefreshCw
+  Globe, Key, Zap, Trash2, DollarSign, Clock, RefreshCw, FolderOpen
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { api, createChatStream, COMMON_MODELS } from './lib/api';
 import { Settings as SettingsPanel } from './components/Settings';
+import { VirtualChatList } from './components/VirtualChatList';
+import { MarkdownRenderer, MARKDOWN_STYLES } from './components/MarkdownRenderer';
+import { AutopilotPanel } from './components/AutopilotPanel';
 
 // ============================================================================
 // TYPE DECLARATIONS
