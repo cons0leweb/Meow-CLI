@@ -10,7 +10,7 @@ import Markdown from 'react-markdown';
 import { ChatMessage } from '../types';
 
 interface ChatContainerProps {
-  currentSession: string;
+  currentSession: string | null;
   messages: ChatMessage[];
   thinkingState: 'idle' | 'thinking' | 'streaming';
   composerVal: string;
