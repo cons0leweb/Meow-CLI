@@ -13,7 +13,6 @@ import { getTrustManager, TRUST_LEVEL } from "./trust.js";
 import { PromptOptimizer } from "./smart/prompt-optimizer.js";
 import { sanitizeToolCallsForApi } from "./images.js";
 
-
 /** @type {Object} Autopilot execution phases */
 const PHASE = {
   PLAN:     "plan",
