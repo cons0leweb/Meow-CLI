@@ -97,7 +97,7 @@ export function Sidebar({
             </div>
             <div className="text-zinc-400 text-xs px-3 py-1.5 rounded-lg">
               <span className="font-mono text-[10px] text-zinc-500 truncate block">
-                {process.cwd() || '/home/cons0leweb/JS/meow-cli'}
+                {cwd}
               </span>
             </div>
           </div>
