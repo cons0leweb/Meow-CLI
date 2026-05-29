@@ -467,6 +467,17 @@ export default function App() {
   const currentTitle = sessionTitles[currentSession] || 'New Chat';
   const accentColor = themeColors.accent;
 
+  // Inject markdown styles into document head
+  useEffect(() => {
+    const styleId = 'meow-markdown-styles';
+    if (!document.getElementById(styleId)) {
+      const style = document.createElement('style');
+      style.id = styleId;
+      style.textContent = MARKDOWN_STYLES;
+      document.head.appendChild(style);
+    }
+  }, []);
+
   return (
     <div className="min-h-screen bg-[#070709] text-[#ced4da] flex flex-col font-sans select-none antialiased relative overflow-hidden">
       
