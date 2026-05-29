@@ -984,7 +984,7 @@ export default function App() {
                                 <span className="text-[9px] text-[#ff7043] font-bold select-none">Executed</span>
                               </div>
                               <div className="p-3 bg-zinc-950 text-zinc-500 text-[10px]">
-                                Simulated invocation records for local testing environments pass cleanly. No anomalies detected.
+                                Recorded from current session execution context.
                               </div>
                             </div>
                           ))}
