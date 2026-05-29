@@ -816,51 +816,50 @@ export default function App() {
                 {/* Body Content */}
                 <div className="flex-1 overflow-y-auto p-5 space-y-6">
 
-                  {/* 3a. CHANGES DIFFERENTIAL SHEETS */}
+                  {/* 3a. CHANGES DIFFERENTIAL SHEETS - from API */}
                   {activeSheet === 'changes' && (
                     <div className="space-y-4">
                       
                       <div className="p-4 bg-zinc-900/40 border border-zinc-900 rounded-xl space-y-1">
                         <span className="text-[10px] text-zinc-500 uppercase tracking-widest font-mono font-bold">Staged Changesets</span>
-                        <p className="text-xs text-zinc-350 font-medium">Branch: feature/concurrent-caches</p>
+                        <p className="text-xs text-zinc-350 font-medium">
+                          {statusInfo ? `Model: ${statusInfo.activeModel}` : 'No active changes'}
+                        </p>
                       </div>
 
-                      {/* File deltas */}
+                      {/* File information from context */}
                       <div className="bg-zinc-950 border border-zinc-900 rounded-xl p-3.5 space-y-3">
-                        <div className="text-[10px] uppercase font-bold text-zinc-550">File System Modifications</div>
+                        <div className="text-[10px] uppercase font-bold text-zinc-550">Context Files</div>
                         
-                        <div className="flex items-center justify-between text-xs py-1 text-zinc-300">
-                          <span className="font-mono">src/core/autopilot.ts</span>
-                          <span className="font-mono text-[10px] text-emerald-500">+18 -7 lines</span>
-                        </div>
-                        
-                        <div className="flex items-center justify-between text-xs py-1 text-zinc-300">
-                          <span className="font-mono">package.json</span>
-                          <span className="font-mono text-[10px] text-emerald-500">+3 -0 lines</span>
-                        </div>
+                        {contextData.length > 0 ? contextData.slice(0, 5).map((ctx: any, idx: number) => (
+                          <div key={idx} className="flex items-center justify-between text-xs py-1 text-zinc-300">
+                            <span className="font-mono">{ctx.path || ctx.file || `context-item-${idx}`}</span>
+                            <span className="font-mono text-[10px] text-zinc-500">{typeof ctx === 'string' ? ctx.substring(0, 30) : ''}</span>
+                          </div>
+                        )) : (
+                          <div className="text-xs text-zinc-500 py-2">No context files loaded</div>
+                        )}
                       </div>
 
-                      {/* Unified visual Diff */}
+                      {/* Visual diff placeholder showing real file data */}
                       <div className="rounded-xl border border-zinc-900 bg-zinc-950 overflow-hidden font-mono text-[11px] leading-relaxed">
                         <div className="px-3 py-2 bg-zinc-900/60 border-b border-zinc-900 text-zinc-400 text-[10px] flex justify-between">
-                          <span>diff --git a/src/core/autopilot.ts</span>
-                          <span className="text-emerald-500">Proposed</span>
+                          <span>Active Session</span>
+                          <span className="text-emerald-500">{currentSession ? 'Connected' : 'None'}</span>
                         </div>
                         
                         <div className="p-4 space-y-2 select-text overflow-x-auto">
-                          <div className="bg-red-950/20 text-red-400 p-2 border-l border-red-800 rounded">
-                            <span className="text-red-600 font-bold select-none mr-2">-</span>
-                            <span>const data = fs.readFileSync(path, 'utf8');</span>
-                          </div>
-                          
-                          <div className="bg-emerald-950/20 text-emerald-400 p-2 border-l border-emerald-600 rounded">
-                            <span className="text-emerald-500 font-bold select-none mr-2">+</span>
-                            <span>const guard = await lockQueue.acquire();</span>
-                          </div>
-                          <div className="bg-emerald-950/20 text-emerald-400 p-2 border-l border-emerald-600 rounded">
-                            <span className="text-emerald-500 font-bold select-none mr-2">+</span>
-                            <span>const data = await fs.promises.readFile(path, 'utf8');</span>
-                          </div>
+                          {sessions.filter(s => s.id === currentSession).map(s => (
+                            <div key={s.id} className="text-zinc-400 text-xs">
+                              <div>Model: {s.model || 'N/A'}</div>
+                              <div>Profile: {s.profile || 'N/A'}</div>
+                              <div>Messages: {s.messagesCount || 0}</div>
+                              <div>CWD: {s.cwd || 'N/A'}</div>
+                            </div>
+                          ))}
+                          {sessions.filter(s => s.id === currentSession).length === 0 && (
+                            <div className="text-zinc-500 text-xs">Select a session to view details</div>
+                          )}
                         </div>
                       </div>
                     </div>
