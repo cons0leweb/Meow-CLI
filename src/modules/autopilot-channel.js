@@ -1,44 +1,290 @@
-import * as readline from "readline";
+/**
+ * CoordinationChannel — Ink-based interactive coordination UI for autopilot mode.
+ *
+ * Renders a two-zone chat interface:
+ *   ┌─ Output area ──────────────────────┐
+ *   │  Autopilot output & coordination   │
+ *   │  messages appear here, scrollable  │
+ *   └────────────────────────────────────┘
+ *   ┌─ Input area (fixed) ───────────────┐
+ *   │  ⎔ coordination> _                │
+ *   └────────────────────────────────────┘
+ *
+ * The input line stays pinned at the bottom. The user can type at any time
+ * while output streams above. No ANSI cursor management needed.
+ */
+
+import process from "node:process";
+import React from "react";
+import { render, Box, Text, useInput, useApp } from "ink";
 import { C, INFO, MUTED, TEXT, TEXT_DIM, ACCENT, AUTO_CLR } from "./ui.js";
 
+// ─── React Component (using createElement — no JSX) ─────────────────────────
+
 /**
- * CoordinationChannel — manages an interactive bottom input bar during autopilot.
+ * CoordinateInput — Ink component for the coordination channel UI.
  *
- * The channel reserves a fixed input line at the bottom of the terminal where
- * the user can type coordination messages during autopilot execution.
- * Autopilot output scrolls above the input bar, creating a clean separation.
- *
- * Uses ANSI escape codes to manage cursor position between content area
- * and the input prompt at the bottom.
+ * Layout:
+ *   ┌──────────────────────────────────────┐
+ *   │  Output entries (flexGrow: 1)        │
+ *   │  - autopilot output                  │
+ *   │  - coordination messages             │
+ *   └──────────────────────────────────────┘
+ *   ┌──────────────────────────────────────┐
+ *   │  ┃ ⎔ coordination > _               │  ← fixed input line
+ *   └──────────────────────────────────────┘
  */
+const CoordinateInput = ({ channel }) => {
+  const { unmount } = useApp();
+  const [input, setInput] = React.useState("");
+  // Initialize with any entries buffered before component mounted
+  const [entries, setEntries] = React.useState([...channel._entries]);
+
+  // Register state updater so the channel can push new entries as they arrive.
+  React.useEffect(() => {
+    channel._setEntriesUpdater(setEntries);
+    // Also forward any entries that arrived between creation and mount
+    if (channel._entries.length > entries.length) {
+      const missed = channel._entries.slice(entries.length);
+      setEntries((prev) => [...prev, ...missed]);
+    }
+    return () => channel._setEntriesUpdater(null);
+  }, []);
+
+  // Keyboard handling
+  useInput(
+    (char, key) => {
+      // Ctrl+D or Ctrl+C → close
+      if (
+        (key.ctrl && key.name === "d") ||
+        (key.ctrl && key.name === "c")
+      ) {
+        channel._handleClose();
+        return;
+      }
+
+      // Enter → submit
+      if (key.name === "return" || key.name === "enter") {
+        const trimmed = input.trim();
+        if (trimmed) {
+          channel._submitMessage(trimmed);
+          setInput("");
+        }
+        return;
+      }
+
+      // Backspace
+      if (key.name === "backspace") {
+        setInput((prev) => prev.slice(0, -1));
+        return;
+      }
+
+      // Printable character
+      if (char && !key.ctrl && !key.meta) {
+        setInput((prev) => prev + char);
+      }
+    },
+    { isActive: channel._active }
+  );
+
+  // Render output entries
+  const outputChildren = entries.map((entry, i) =>
+    React.createElement(Text, { key: i }, entry)
+  );
+
+  // Render input line
+  const inputLine = React.createElement(
+    Text,
+    null,
+    "  ",
+    AUTO_CLR("┃"),
+    " ",
+    ACCENT("⎔"),
+    " ",
+    AUTO_CLR.bold("coordination"),
+    MUTED(" > "),
+    input,
+    React.createElement(Text, { inverse: true }, " ")
+  );
+
+  return React.createElement(
+    Box,
+    { flexDirection: "column", width: "100%", minHeight: 1 },
+    // Output area
+    React.createElement(Box, { flexDirection: "column", flexGrow: 1 }, ...outputChildren),
+    // Fixed input area
+    React.createElement(Box, null, inputLine)
+  );
+};
+
+// ─── CoordinationChannel class ──────────────────────────────────────────────
+
 class CoordinationChannel {
   constructor() {
     /** @type {Array<string>} Queued coordination messages */
     this._queue = [];
     /** @type {boolean} Whether the channel is active */
     this._active = false;
-    /** @type {readline.Interface|null} */
-    this._rl = null;
+    /** @type {Object|null} Ink render result */
+    this._app = null;
     /** @type {number} Total messages received */
     this._totalReceived = 0;
-    /** @type {boolean} Whether input prompt is currently displayed */
-    this._promptDisplayed = false;
+    /** @type {Array<string>} Display entries buffer */
+    this._entries = [];
+    /**
+     * @type {Function|null} React setState for entries, registered by component.
+     */
+    this._setEntries = null;
+    /** @type {Function|null} Original console.log */
+    this._restoreConsoleLog = null;
+    /** @type {Function|null} Original console.error */
+    this._restoreConsoleError = null;
   }
 
   /**
+   * Called by the React component to register its setState for entries.
+   * @param {Function|null} fn - React setState function
+   * @private
+   */
+  _setEntriesUpdater(fn) {
+    this._setEntries = fn;
+  }
+
+  /**
+   * Adds a line of text to the display, pushing it to the React component.
+   * @param {string} text
+   * @private
+   */
+  _addToDisplay(text) {
+    if (!text) return;
+    this._entries.push(text);
+
+    if (this._setEntries) {
+      // Append to React state
+      this._setEntries((prev) => {
+        const next = [...prev];
+        next.push(text);
+        return next;
+      });
+    }
+  }
+
+  /**
+   * Patches console.log / console.error to route through the display.
+   * @private
+   */
+  _patchConsole() {
+    const self = this;
+
+    this._restoreConsoleLog = console.log;
+    this._restoreConsoleError = console.error;
+
+    console.log = function (...args) {
+      const text = args
+        .map((a) =>
+          typeof a === "object"
+            ? a instanceof Error
+              ? a.message
+              : JSON.stringify(a, null, 2)
+            : String(a)
+        )
+        .join(" ");
+      self._addToDisplay(text);
+    };
+
+    console.error = function (...args) {
+      const text = args
+        .map((a) =>
+          typeof a === "object"
+            ? a instanceof Error
+              ? a.message
+              : JSON.stringify(a, null, 2)
+            : String(a)
+        )
+        .join(" ");
+      self._addToDisplay(text);
+    };
+  }
+
+  /**
+   * Restores the original console.log / console.error.
+   * @private
+   */
+  _unpatchConsole() {
+    if (this._restoreConsoleLog) {
+      console.log = this._restoreConsoleLog;
+      this._restoreConsoleLog = null;
+    }
+    if (this._restoreConsoleError) {
+      console.error = this._restoreConsoleError;
+      this._restoreConsoleError = null;
+    }
+  }
+
+  /**
+   * Submits a coordination message to the queue.
+   * @param {string} text
+   * @private
+   */
+  _submitMessage(text) {
+    this._queue.push(text);
+    this._totalReceived++;
+
+    // Add confirmation to display
+    const preview = text.length > 60 ? text.slice(0, 57) + "…" : text;
+    this._addToDisplay(
+      `  ${AUTO_CLR("┃")} ${INFO("💬")} ${MUTED("Coordination:")} ${TEXT(`"${preview}"`)} ${MUTED(`(#${this._totalReceived})`)}`
+    );
+  }
+
+  /**
+   * Handles close from the UI (Ctrl+D / Ctrl+C).
+   * @private
+   */
+  _handleClose() {
+    if (!this._active) return;
+    this._active = false;
+
+    this._addToDisplay(
+      `  ${MUTED("┃")} ${TEXT_DIM("Coordination channel closed")}`
+    );
+
+    // Delay cleanup so the close message is visible
+    setTimeout(() => this._cleanup(), 80);
+  }
+
+  /**
+   * Cleans up: restores console functions and unmounts Ink.
+   * @private
+   */
+  _cleanup() {
+    this._unpatchConsole();
+
+    if (this._app) {
+      try {
+        this._app.unmount();
+      } catch {
+        /* ignore */
+      }
+      this._app = null;
+    }
+  }
+
+  // ─── Public API ───────────────────────────────────────────────────────────
+
+  /**
    * Starts the coordination channel.
-   * Sets up a readline interface with a persistent bottom input bar.
+   * Renders the Ink chat interface and patches console.log so all
+   * autopilot output flows into the displayed entry list.
    */
   start() {
     if (this._active) return;
     this._active = true;
     this._queue = [];
+    this._entries = [];
     this._totalReceived = 0;
-    this._promptDisplayed = false;
 
-    const COLS = process.stdout.columns || 80;
-
-    // ── Banner ──
+    // ── Print banner using original console BEFORE patching ──
     console.log(
       `  ${INFO("┃")} ${ACCENT.bold("💬 Coordination Channel")} ${MUTED("active — type at the bottom prompt")}`
     );
@@ -46,125 +292,60 @@ class CoordinationChannel {
       `  ${MUTED("┃")} ${TEXT_DIM("Messages appear in agent context on next iteration")}`
     );
     console.log(
-      `  ${MUTED("┃")} ${TEXT_DIM("Press")} ${ACCENT("Ctrl+D")} ${TEXT_DIM("to close channel early")}\n`
+      `  ${MUTED("┃")} ${TEXT_DIM("Press")} ${ACCENT("Ctrl+D")} ${TEXT_DIM("to close channel early")}`
     );
+    console.log("");
 
-    // ── Separator line (creates visual "shift" from content) ──
-    const sepLine = `  ${AUTO_CLR("┋")} ${MUTED("─".repeat(Math.min(COLS - 8, 60)))}`;
-    console.log(sepLine);
+    // ── Patch console.log / console.error ──
+    this._patchConsole();
 
-    // ── Set up readline with proper terminal handling ──
-    this._rl = readline.createInterface({
-      input: process.stdin,
-      output: process.stdout,
-      terminal: true,
-      prompt: "",
-    });
-
-    // Show initial input prompt at the bottom
-    this._showPrompt();
-
-    this._rl.on("line", (line) => {
-      const trimmed = line.replace(/\r?\n$/, "").trim();
-      if (!trimmed || !this._active) {
-        this._showPrompt();
-        return;
+    // ── Render Ink app ──
+    this._app = render(
+      React.createElement(CoordinateInput, { channel: this }),
+      {
+        patchConsole: false, // We handle console patching ourselves
+        exitOnCtrlC: false,  // We handle Ctrl+C ourselves
+        alternateScreen: false,
       }
-
-      this._queue.push(trimmed);
-      this._totalReceived++;
-
-      // Clear the prompt line, show confirmation, then re-show prompt
-      const preview = trimmed.length > 60
-        ? trimmed.slice(0, 57) + "…"
-        : trimmed;
-      this._clearInputLine();
-      console.log(
-        `  ${AUTO_CLR("┃")} ${INFO("💬")} ${MUTED("Coordination:")} ${TEXT(`"${preview}"`)} ${MUTED(`(#${this._totalReceived})`)}`
-      );
-      this._showPrompt();
-    });
-
-    this._rl.on("close", () => {
-      if (this._active) {
-        this._clearInputLine();
-        console.log(`  ${MUTED("┃")} ${TEXT_DIM("Coordination channel closed")}`);
-      }
-      this._active = false;
-      this._promptDisplayed = false;
-    });
-  }
-
-  /**
-   * Shows the input prompt at the bottom line.
-   * @private
-   */
-  _showPrompt() {
-    if (!this._rl || !this._active) return;
-    
-    const prompt = `  ${AUTO_CLR("┃")} ${ACCENT("⎔")} ${AUTO_CLR.bold("coordination")}${MUTED(" > ")}`;
-    this._rl.setPrompt(prompt);
-    this._rl.prompt(true);
-    this._promptDisplayed = true;
-  }
-
-  /**
-   * Clears the current input prompt line from the terminal.
-   * Moves cursor up one line, clears it, and returns cursor to start.
-   * @private
-   */
-  _clearInputLine() {
-    if (!this._promptDisplayed) return;
-    // ANSI: move up 1 line, clear line, move to beginning
-    process.stdout.write("\x1b[1A\x1b[2K\r");
-    this._promptDisplayed = false;
-  }
-
-  /**
-   * Clears the input prompt temporarily before autopilot output.
-   * Should be called BEFORE autopilot writes new output.
-   * After output is done, call refresh() to re-show the prompt.
-   */
-  suspendPrompt() {
-    this._clearInputLine();
-  }
-
-  /**
-   * Re-shows the input prompt after autopilot output.
-   * Call this after any autopilot output that might have overwritten
-   * or pushed past the input line.
-   */
-  refresh() {
-    if (this._active && this._rl) {
-      this._showPrompt();
-    }
+    );
   }
 
   /**
    * Stops the coordination channel and cleans up.
    */
   stop() {
-    if (!this._active && !this._rl) return;
-    
-    // Clear the input line first
-    this._clearInputLine();
+    if (!this._active && !this._app) return;
+
+    const hadMessages = this._totalReceived > 0;
     this._active = false;
 
-    if (this._rl) {
-      try {
-        this._rl.close();
-      } catch { /* ignore */ }
-      this._rl = null;
-    }
+    this._cleanup();
 
-    if (this._totalReceived > 0) {
+    // ── Print summary via original console (already restored) ──
+    if (hadMessages) {
       console.log(
-        `  ${INFO("┃")} ${ACCENT("💬")} ${MUTED(`Coordination closed (${this._totalReceived} message${this._totalReceived !== 1 ? "s" : ""} relayed)`)}`
+        `  ${INFO("┃")} ${ACCENT("💬")} ${MUTED(
+          `Coordination closed (${this._totalReceived} message${this._totalReceived !== 1 ? "s" : ""} relayed)`
+        )}`
       );
     }
 
     this._queue = [];
-    this._promptDisplayed = false;
+    this._entries = [];
+  }
+
+  /**
+   * @deprecated No longer needed with Ink — kept as no-op for compatibility.
+   */
+  suspendPrompt() {
+    // Ink manages the layout — no suspension needed
+  }
+
+  /**
+   * @deprecated No longer needed with Ink — kept as no-op for compatibility.
+   */
+  refresh() {
+    // Ink manages the layout — no refresh needed
   }
 
   /**

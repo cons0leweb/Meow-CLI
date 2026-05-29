@@ -555,6 +555,8 @@ class Autopilot {
       `${MUTED}Auto-confirm:${C.reset} ${SUCCESS}ON${C.reset}`,
       ``,
       `${TEXT_DIM}Press ${C.bold}Ctrl+C${C.reset}${TEXT_DIM} to stop gracefully${C.reset}`,
+      ``,
+      `${TEXT_DIM}Type at the ${AUTO_CLR.bold("coordination")} ${TEXT_DIM}prompt below to send messages${C.reset}`,
     ];
     console.log(box(lines.join("\n"), { title: "🤖 AUTOPILOT", color: AUTO_CLR, width: Math.min(COLS - 2, 65) }));
     console.log("");
@@ -700,7 +702,7 @@ class Autopilot {
 
     if (injectedCount > 0) {
       console.log(
-        `\n  ${INFO("┃")} ${ACCENT.bold(`💬 ${injectedCount} coordination message${injectedCount > 1 ? "s" : ""} injected`)}`
+        `  ${INFO("┃")} ${ACCENT.bold(`💬 ${injectedCount} coordination message${injectedCount > 1 ? "s" : ""} injected`)}`
       );
     }
 
@@ -836,14 +838,22 @@ class Autopilot {
         this._manageContext();
 
         let data;
-        const spinner = new Spinner(`${this.currentPhase} (iter ${this.iteration})`);
+        // Skip the raw-stdout Spinner when coordination channel is active
+        // (Ink manages the terminal, raw writes would conflict)
+        const useSpinner = !this._channel;
+        const spinner = useSpinner
+          ? new Spinner(`${this.currentPhase} (iter ${this.iteration})`)
+          : null;
+        if (!useSpinner) {
+          console.log(`  ${ACCENT("⟳")} ${TEXT_DIM(`${this.currentPhase} (iter ${this.iteration})`)}`);
+        }
         try {
-          spinner.start();
+          if (spinner) spinner.start();
           data = await callApi(this.messages, this.cfg);
-          spinner.stop();
+          if (spinner) spinner.stop();
           apiRetries = 0;
         } catch (e) {
-          spinner.stop();
+          if (spinner) spinner.stop();
           this.errors++;
           this._log("api_error", e.message);
 

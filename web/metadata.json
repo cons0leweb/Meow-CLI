@@ -1,0 +1,6 @@
+{
+  "name": "Meow Desktop Concept",
+  "description": "Senior Product Design and UX Architecture specification for Meow CLI Desktop, a next-gen developer-facing AI Client of 2026.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
