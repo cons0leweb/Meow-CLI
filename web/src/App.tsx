@@ -239,30 +239,56 @@ export default function App() {
     );
   };
 
-  const handleCreateNewChat = () => {
-    const newSessionId = `custom-chat-${Date.now()}`;
-    setThreads(prev => ({
-      ...prev,
-      [newSessionId]: [
-        {
-          id: 'init-one',
-          role: 'assistant',
-          content: 'Hello. I am connected and ready. Instruct Autopilot on specific code modifications or query workspace parameters.',
-          timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })
-        }
-      ]
-    }));
-    setCurrentSession(newSessionId);
-    triggerNotification("New chat context initialized.");
+  const handleCreateNewChat = async () => {
+    try {
+      const result = await api.createSession();
+      const newSessionId = result.sessionId;
+      
+      setThreads(prev => ({
+        ...prev,
+        [newSessionId]: [
+          {
+            id: 'init-one',
+            role: 'assistant',
+            content: 'Hello. I am connected and ready. Instruct Autopilot on specific code modifications or query workspace parameters.',
+            timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })
+          }
+        ]
+      }));
+      setCurrentSession(newSessionId);
+      
+      // Refresh sessions list
+      const sessionsData = await api.getSessions();
+      setSessions(sessionsData.sessions || []);
+      
+      triggerNotification("New chat context initialized.");
+    } catch {
+      // Fallback: create local session if API unavailable
+      const fallbackId = `local-${Date.now()}`;
+      setThreads(prev => ({
+        ...prev,
+        [fallbackId]: [
+          {
+            id: 'init-one',
+            role: 'assistant',
+            content: 'Hello. I am connected and ready. Instruct Autopilot on specific code modifications or query workspace parameters.',
+            timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })
+          }
+        ]
+      }));
+      setCurrentSession(fallbackId);
+      triggerNotification("New chat created (offline mode).");
+    }
   };
 
-  // Pre-configured planned steps for Scenario 3
-  const preConfiguredPlanSteps = [
-    { label: 'Inspect middleware files', status: 'completed' },
-    { label: 'Patch authorization token verify blocks', status: 'completed' },
-    { label: 'Run validation test suite', status: 'pending' },
-    { label: 'Verify cache locks in local environment', status: 'pending' }
-  ];
+  // Build plan steps from autopilot status
+  const planSteps = autopilotState 
+    ? [
+        { label: 'Autopilot status', status: autopilotState.running ? 'running' as const : 'pending' as const },
+        { label: `Phase: ${autopilotState.phase || 'idle'}`, status: autopilotState.running ? 'active' as const : 'pending' as const },
+        { label: `Iterations: ${autopilotState.iterations}`, status: 'pending' as const },
+      ]
+    : [];
 
   return (
     <div className="min-h-screen bg-[#070709] text-[#ced4da] flex flex-col font-sans select-none antialiased relative overflow-hidden">
