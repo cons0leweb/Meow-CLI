@@ -45,10 +45,12 @@ export function ApiSettings({ onNotify, onConfigChange, status }: ApiSettingsPro
       if (costRes) setCostData(costRes as any);
       if (providersRes) {
         setProvidersData(providersRes as any);
-        const activeProv = providersRes.providers[providersRes.active];
+        const activeProv = providersRes.active ? providersRes.providers[providersRes.active] : null;
         if (activeProv) {
           setApiBaseState(activeProv.base_url || '');
-          setApiKeyState(activeProv.api_key || '');
+          if (activeProv.api_key && !activeProv.api_key.includes('...')) {
+            setApiKeyState(activeProv.api_key);
+          }
         }
       }
     } catch (err) {
@@ -58,6 +60,11 @@ export function ApiSettings({ onNotify, onConfigChange, status }: ApiSettingsPro
 
   useEffect(() => {
     loadCostAndProviders();
+    // Load raw config to populate fields
+    api.getRawConfig().then(cfg => {
+      if (cfg.api_key && !apiKey) setApiKeyState(cfg.api_key);
+      if (cfg.api_base && !apiBase) setApiBaseState(cfg.api_base);
+    }).catch(() => {});
   }, []);
 
   const handleSaveEngine = async () => {
@@ -114,6 +121,15 @@ export function ApiSettings({ onNotify, onConfigChange, status }: ApiSettingsPro
     }
   };
 
+  // Get available providers from backend data
+  const availableProviders = providersData?.providers
+    ? Object.keys(providersData.providers)
+    : [];
+
+  // Get common provider IDs (union of built-in + configured)
+  const commonProviderIds = ['google', 'openai', 'anthropic', 'deepseek'];
+  const allProviderIds = [...new Set([...commonProviderIds, ...availableProviders])];
+
   return (
     <div className="space-y-6 pt-1 select-text text-zinc-300">
       
@@ -131,9 +147,10 @@ export function ApiSettings({ onNotify, onConfigChange, status }: ApiSettingsPro
       {/* Provider Switch Panel */}
       <div className="space-y-2.5">
         <div className="text-[10px] font-mono uppercase tracking-widest text-zinc-500 font-bold">LLM Service Providers</div>
-        <div className="grid grid-cols-3 gap-2">
-          {['google', 'openai', 'anthropic'].map((prov) => {
+        <div className="grid grid-cols-2 gap-2">
+          {allProviderIds.map((prov) => {
             const isActive = activeProvider === prov;
+            const isConfigured = availableProviders.includes(prov);
             return (
               <button
                 key={prov}
@@ -141,15 +158,25 @@ export function ApiSettings({ onNotify, onConfigChange, status }: ApiSettingsPro
                 className={`flex flex-col items-center justify-center p-3 rounded-xl border transition text-center cursor-pointer ${
                   isActive 
                     ? 'border-[#ff7043]/50 bg-[#ff7043]/5 text-white' 
-                    : 'border-zinc-900 bg-zinc-950/40 hover:border-zinc-800 text-zinc-400 hover:text-white'
+                    : isConfigured
+                      ? 'border-zinc-800 bg-zinc-950/40 hover:border-zinc-700 text-zinc-300 hover:text-white'
+                      : 'border-zinc-900 bg-zinc-950/40 text-zinc-500 hover:border-zinc-800'
                 }`}
               >
                 <Database className={`w-4 h-4 mb-1.5 ${isActive ? 'text-[#ff7043]' : 'text-zinc-500'}`} />
                 <span className="text-[10px] font-mono uppercase tracking-tight font-semibold">{prov}</span>
+                {isConfigured && (
+                  <span className="text-[8px] text-emerald-500 mt-1">configured</span>
+                )}
               </button>
             );
           })}
         </div>
+        {availableProviders.length === 0 && (
+          <p className="text-[10px] text-zinc-500 text-center pt-1">
+            No providers configured. Add providers via CLI: /provider add
+          </p>
+        )}
       </div>
 
       {/* Core Inputs */}
@@ -189,6 +216,7 @@ export function ApiSettings({ onNotify, onConfigChange, status }: ApiSettingsPro
                 onChange={(e) => setModelState(e.target.value)}
                 className="w-full bg-zinc-900/80 border border-zinc-800 rounded-lg py-2 pl-8 pr-8 text-xs text-white focus:outline-none focus:border-zinc-700 min-h-[34px] cursor-pointer appearance-none"
               >
+                <option value="">Select a model...</option>
                 <optgroup label="Google Engines" className="bg-[#09090c]">
                   {COMMON_MODELS.filter(m => m.provider === 'google').map(m => (
                     <option key={m.id} value={m.id}>{m.name}</option>
@@ -201,6 +229,11 @@ export function ApiSettings({ onNotify, onConfigChange, status }: ApiSettingsPro
                 </optgroup>
                 <optgroup label="Anthropic Engines" className="bg-[#09090c]">
                   {COMMON_MODELS.filter(m => m.provider === 'anthropic').map(m => (
+                    <option key={m.id} value={m.id}>{m.name}</option>
+                  ))}
+                </optgroup>
+                <optgroup label="DeepSeek Engines" className="bg-[#09090c]">
+                  {COMMON_MODELS.filter(m => m.provider === 'deepseek').map(m => (
                     <option key={m.id} value={m.id}>{m.name}</option>
                   ))}
                 </optgroup>
@@ -259,11 +292,11 @@ export function ApiSettings({ onNotify, onConfigChange, status }: ApiSettingsPro
             <div className="grid grid-cols-2 gap-3">
               <div className="p-3 bg-zinc-900/30 border border-zinc-900 rounded-lg space-y-1">
                 <span className="text-[9px] uppercase text-zinc-500 font-medium">Session Queries</span>
-                <div className="text-sm font-semibold text-white font-mono">{costData.session.requests} calls</div>
+                <div className="text-sm font-semibold text-white font-mono">{costData.session?.requests || 0} calls</div>
               </div>
               <div className="p-3 bg-[#111115] border border-zinc-900 rounded-lg space-y-1">
                 <span className="text-[9px] uppercase text-[#ff7043] font-medium font-semibold">Total Price Estimation</span>
-                <div className="text-sm font-bold text-emerald-400 font-mono">${costData.total.total_usd.toFixed(4)}</div>
+                <div className="text-sm font-bold text-emerald-400 font-mono">${(costData.total?.total_usd || 0).toFixed(4)}</div>
               </div>
             </div>
 
@@ -271,15 +304,15 @@ export function ApiSettings({ onNotify, onConfigChange, status }: ApiSettingsPro
             <div className="space-y-1.5 text-xs">
               <div className="flex justify-between items-center py-1 border-b border-zinc-900/40 text-[11px]">
                 <span className="text-zinc-500">Session input tokens:</span>
-                <span className="font-mono text-zinc-300">{costData.session.input_tokens.toLocaleString()}</span>
+                <span className="font-mono text-zinc-300">{(costData.session?.input_tokens || 0).toLocaleString()}</span>
               </div>
               <div className="flex justify-between items-center py-1 border-b border-zinc-900/40 text-[11px]">
                 <span className="text-zinc-500">Session output tokens:</span>
-                <span className="font-mono text-zinc-300">{costData.session.output_tokens.toLocaleString()}</span>
+                <span className="font-mono text-zinc-300">{(costData.session?.output_tokens || 0).toLocaleString()}</span>
               </div>
               <div className="flex justify-between items-center py-1 border-b border-zinc-900/40 text-[11px]">
                 <span className="text-zinc-500">Total Accum. queries:</span>
-                <span className="font-mono text-white">{costData.total.requests} runs</span>
+                <span className="font-mono text-white">{costData.total?.requests || 0} runs</span>
               </div>
             </div>
 
@@ -295,6 +328,14 @@ export function ApiSettings({ onNotify, onConfigChange, status }: ApiSettingsPro
           </div>
         </div>
       )}
+
+      {/* Add new provider section */}
+      <div className="space-y-2">
+        <div className="text-[10px] font-mono uppercase tracking-widest text-zinc-500 font-bold">Add New Provider</div>
+        <p className="text-[10px] text-zinc-500">
+          Use meow-cli CLI to add providers: <code className="text-zinc-300">/provider add my-provider --api-key ... --base-url ...</code>
+        </p>
+      </div>
 
     </div>
   );

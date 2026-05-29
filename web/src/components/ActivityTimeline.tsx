@@ -91,7 +91,7 @@ export const ActivityTimeline: React.FC<ActivityTimelineProps> = ({ items, onIte
               <div className="bg-zinc-900 border border-zinc-850 hover:border-zinc-800/80 p-3 rounded-xl transition duration-200 shadow-soft">
                 <div className="flex items-center justify-between gap-3 mb-1">
                   <div className="flex items-center gap-2">
-                    <div className={`w-6 h-6 rounded-md flex items-center justify-center border ${config.colorClass}`}>
+                    <div className={`w-4 h-4 rounded-md flex items-center justify-center border ${config.colorClass}`}>
                       <Icon className="w-3.5 h-3.5" />
                     </div>
                     <div>
