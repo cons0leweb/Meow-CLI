@@ -60,6 +60,34 @@ app.get('/api/debug', (req, res) => {
 
 console.log('DEBUG: Test route registered');
 
+// ─── Tool-to-Activity-Type Mapper ────────────────────────────────────
+// Maps tool names to ActivityTimeline types for beautiful frontend rendering
+function toolToActivityType(toolName) {
+  const toolMap = {
+    'read_file':      'read',
+    'list_dir':       'read',
+    'grep_search':    'read',
+    'write_file':     'edit',
+    'patch_file':     'edit',
+    'run_shell':      'build',
+    'tool_chain':     'build',
+    'http_request':   'generic',
+    'web_search':     'generic',
+    'delegate_task':  'thought',
+    'think':          'thought',
+    'working':        'thought',
+    'ask_user':       'review',
+    'confirm':        'review',
+    'choose':         'review',
+    'git_diff':       'review',
+    'git_log':        'review',
+    'git_commit':     'edit',
+    'git_branch':     'edit',
+    'ci_pipeline':    'test',
+  };
+  return toolMap[toolName] || 'generic';
+}
+
 // ─── Middleware ──────────────────────────────────────────────────────
 app.use(cors({ origin: ['http://localhost:3000', 'http://localhost:5173', 'http://127.0.0.1:3000', 'http://localhost:3001'], credentials: true }));
 app.use(express.json({ limit: '10mb' }));
