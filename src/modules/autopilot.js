@@ -903,11 +903,6 @@ class Autopilot {
       this._log("fatal", e.message);
       log.err(`Fatal: ${e.message}`);
     } finally {
-      // Stop coordination channel
-      if (this._channel) {
-        this._channel.stop();
-        this._channel = null;
-      }
       this.cfg.auto_yes = origAutoYes;
       this.messages[0] = { role: "system", content: originalSystem };
       this.running = false;
