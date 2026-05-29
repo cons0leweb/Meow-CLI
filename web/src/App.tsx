@@ -212,6 +212,9 @@ export default function App() {
     e.preventDefault();
     if (!composerVal.trim()) return;
 
+    // Clear previous tool activity items for new submission
+    setToolActivityItems([]);
+
     const typedMsg = composerVal;
     
     // Build messages array for the API
