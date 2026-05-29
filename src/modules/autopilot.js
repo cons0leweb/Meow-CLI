@@ -547,7 +547,7 @@ class Autopilot {
       ``,
       `${TEXT_DIM}Press ${C.bold}Ctrl+C${C.reset}${TEXT_DIM} to stop gracefully${C.reset}`,
       ``,
-      `${TEXT_DIM}Type at the ${AUTO_CLR.bold("coordination")} ${TEXT_DIM}prompt below to send messages${C.reset}`,
+
     ];
     console.log(box(lines.join("\n"), { title: "🤖 AUTOPILOT", color: AUTO_CLR, width: Math.min(COLS - 2, 65) }));
     console.log("");
