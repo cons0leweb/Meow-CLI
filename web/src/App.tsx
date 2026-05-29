@@ -446,15 +446,15 @@ export default function App() {
 
             </div>
 
-            {/* Profile settings footer section */}
+            {/* Profile settings footer section from API */}
             <div className="pt-3 border-t border-zinc-900 flex items-center justify-between">
               <div className="flex items-center gap-2 truncate">
                 <div className="w-7 h-7 rounded-full bg-[#ff7043]/15 border border-[#ff7043]/25 flex items-center justify-center font-bold text-xs text-white">
-                  A
+                  {statusInfo?.activeProfile?.[0]?.toUpperCase() || 'A'}
                 </div>
                 <div className="truncate">
-                  <div className="text-xs font-semibold text-white truncate">Administrator</div>
-                  <div className="text-[10px] text-zinc-500 truncate">active-user@domain</div>
+                  <div className="text-xs font-semibold text-white truncate">{statusInfo?.activeProfile || 'User'}</div>
+                  <div className="text-[10px] text-zinc-500 truncate">{statusInfo?.activeModel || 'No model set'}</div>
                 </div>
               </div>
               <motion.button 
