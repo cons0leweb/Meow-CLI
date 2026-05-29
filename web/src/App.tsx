@@ -1,10 +1,13 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   Play, Pause, Check, Sparkles, X, User, Cpu, GitBranch, 
   HelpCircle, ChevronRight, CheckCircle2, ChevronDown, ListTodo, FileCode, Search,
-  MessageSquare, Plus, Settings, Eye, FileText, Terminal, ArrowUpRight, Code, Shield, RotateCcw
+  MessageSquare, Plus, Settings, Eye, FileText, Terminal, ArrowUpRight, Code, Shield, RotateCcw,
+  Globe, Key, Zap, Trash2, DollarSign, Clock, RefreshCw
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { api, createChatStream, COMMON_MODELS } from './lib/api';
+import { Settings as SettingsPanel } from './components/Settings';
 
 // ============================================================================
 // TYPE DECLARATIONS
@@ -34,16 +37,20 @@ export interface ChatMessage {
 // ============================================================================
 export default function App() {
   // Current session & interactive state
-  const [currentSession, setCurrentSession] = useState<string>('crud-create');
+  const [currentSession, setCurrentSession] = useState<string>('default');
+  const [sessions, setSessions] = useState<Array<{id: string; model: string; messagesCount: number; time: number}>>([]);
+  const [sessionMessages, setSessionMessages] = useState<Record<string, ChatMessage[]>>({});
+  const [sessionTitles, setSessionTitles] = useState<Record<string, string>>({});
   
-  // Right sheet system keys: 'changes', 'context', 'action-detail', null
-  const [activeSheet, setActiveSheet] = useState<'changes' | 'context' | 'action-detail' | null>(null);
+  // Right sheet system keys: 'changes', 'context', 'action-detail', 'settings', 'cost', null
+  const [activeSheet, setActiveSheet] = useState<'changes' | 'context' | 'action-detail' | 'settings' | 'cost' | null>(null);
   const [selectedActionDetail, setSelectedActionDetail] = useState<ActionDetail | null>(null);
 
   // Simulated global states
   const [composerVal, setComposerVal] = useState<string>('');
   const [thinkingState, setThinkingState] = useState<'idle' | 'thinking' | 'streaming'>('idle');
   const [showNotification, setShowNotification] = useState<string | null>(null);
+  const [streamingContent, setStreamingContent] = useState<string>('');
 
   // Collapsed plan checklists in list
   const [autopilotPaused, setAutopilotPaused] = useState<boolean>(false);
@@ -52,224 +59,343 @@ export default function App() {
 
   // Search context
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   // Autoapprove state
   const [autoApproveActive, setAutoApproveActive] = useState<boolean>(false);
 
-  // Active threads state dictionary for the three core scenes
-  const [threads, setThreads] = useState<Record<string, ChatMessage[]>>({
-    'crud-create': [
-      {
-        id: 'c1',
-        role: 'user',
-        content: 'Create CRUD for users',
-        timestamp: '19:40:02'
-      },
-      {
-        id: 'c2',
-        role: 'assistant',
-        content: `I'll create a CRUD implementation for users. I am going to inspect existing schemas in the schema directory, patch the active user.ts entity, and execute a local database migration test suite to verify consistency limits.`,
-        timestamp: '19:40:05',
-        actions: [
-          { title: 'Edited app.tsx', sheetKey: 'edited-app' },
-          { title: 'Read users.ts', sheetKey: 'read-users' },
-          { title: 'Ran migration tests', sheetKey: 'ran-tests' }
-        ]
-      }
-    ],
-    'auth-debug': [
-      {
-        id: 'd1',
-        role: 'user',
-        content: 'Identify lock issues with concurrency caches',
-        timestamp: '19:41:12'
-      },
-      {
-        id: 'd2',
-        role: 'assistant',
-        content: `I have isolated three blocking file synchronous calls inside \`src/core/autopilot.ts\`. I am replacing standard synchronous fs files operations with an asynchronous LRU cache wrap secured by a clean mutex locking primitive.`,
-        timestamp: '19:41:18',
-        actions: [
-          { title: 'Patched autopilot.ts', sheetKey: 'patched-autopilot' },
-          { title: 'Configured async Lock system', sheetKey: 'async-lock' }
-        ]
-      }
-    ],
-    'auth-refactor': [
-      {
-        id: 'p1',
-        role: 'user',
-        content: 'Refactor auth middleware caching sequence',
-        timestamp: '19:43:00'
-      },
-      {
-        id: 'p2',
-        role: 'assistant',
-        content: 'Autopilot sequence initiated for auth middleware caching parameter adjustment.',
-        timestamp: '19:43:02',
-        isAutopilotCard: true,
-        autopilotTitle: 'Refactor auth middleware',
-        autopilotStep: 'Step 2 of 5',
-        autopilotTotalSteps: 5,
-        autopilotStatus: 'running'
-      }
-    ]
+  // Config/status
+  const [config, setConfig] = useState<Record<string, any>>({});
+  const [status, setStatus] = useState<any>(null);
+  const [cost, setCost] = useState<any>(null);
+  
+  // Abort controller for streaming
+  const abortRef = useRef<AbortController | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Theme from config
+  const [themeColors, setThemeColors] = useState({
+    accent: '#CC7832',
+    text: '#d4d4d8',
+    muted: '#52525b',
   });
 
-  // Action detail dictionary mapping for Right Sheet renders
-  const actionDetailMap: Record<string, ActionDetail> = {
-    'edited-app': {
-      title: 'Edited app.tsx',
-      summary: [
-        'Added express router initialization for /api/v1/users',
-        'Registered body-parser schema validator middleware',
-        'Injected error middleware handling for duplicate database records'
-      ],
-      files: ['src/App.tsx', 'src/server.ts'],
-      tools: ['patch_file', 'lint_applet']
-    },
-    'read-users': {
-      title: 'Read users.ts',
-      summary: [
-        'Inspected relational schemas defined inside schema directory',
-        'Found and validated Type constraints for UserPayload attributes',
-        'Isolated database stream query indexes to align speed constraints'
-      ],
-      files: ['src/core/users.ts'],
-      tools: ['view_file', 'grep']
-    },
-    'ran-tests': {
-      title: 'Ran migration tests',
-      summary: [
-        'Spawned child process validator running local DB mocks',
-        'All 14 integration test scripts finished successfully',
-        'Zero schema migration overlap detected under stress parameter checks'
-      ],
-      files: ['tests/migration.spec.ts'],
-      tools: ['run_shell', 'compile_applet']
-    },
-    'patched-autopilot': {
-      title: 'Patched autopilot.ts',
-      summary: [
-        'Replaced fs.readFileSync with async fs.promises.readFile',
-        'Eliminated active main single loop blocking spikes under concurrent stress cycles',
-        'Optimized critical throughput path'
-      ],
-      files: ['src/core/autopilot.ts'],
-      tools: ['patch_file']
-    },
-    'async-lock': {
-      title: 'Configured async Lock system',
-      summary: [
-        'Introduced non-blocking atomic Mutex queue primitive',
-        'Prevented duplicate write overlaps when concurrent sessions execute together',
-        'Verified lock lifecycle release timeout intervals'
-      ],
-      files: ['src/core/locks.ts'],
-      tools: ['create_file', 'run_shell']
+  const currentTheme = config.theme || 'default';
+
+  // Initialize
+  useEffect(() => {
+    loadInitialData();
+  }, []);
+
+  // Auto-scroll on new messages
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [sessionMessages, streamingContent, thinkingState]);
+
+  const loadInitialData = async () => {
+    try {
+      const [s, cfg, sess, cst] = await Promise.all([
+        api.status().catch(() => null),
+        api.getConfig().catch(() => ({})),
+        api.getSessions().catch(() => ({ sessions: [], current: null })),
+        api.getCost().catch(() => null),
+      ]);
+      setStatus(s);
+      setConfig(cfg);
+      setCost(cst);
+      
+      // Load sessions
+      if (sess.sessions) {
+        setSessions(sess.sessions);
+        if (sess.current && !currentSession) {
+          setCurrentSession(sess.current);
+        }
+      }
+
+      // Load messages for current session
+      if (sess.current) {
+        const sessionData = await api.loadSession(sess.current).catch(() => null);
+        if (sessionData?.messages) {
+          const msgs = sessionData.messages.map((m: any, i: number) => ({
+            id: `msg-${i}`,
+            role: m.role || 'user',
+            content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
+            timestamp: sessionData.time ? new Date(sessionData.time).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }) : '',
+          }));
+          setSessionMessages(prev => ({ ...prev, [sess.current!]: msgs }));
+          
+          // Set title from first user message
+          const firstUser = msgs.find(m => m.role === 'user');
+          if (firstUser) {
+            setSessionTitles(prev => ({ ...prev, [sess.current!]: firstUser.content.slice(0, 40) }));
+          }
+        }
+      }
+
+      // Try to load theme
+      try {
+        const themeData = await api.getTheme();
+        if (themeData.themes && themeData.themes[cfg.theme || 'default']) {
+          const t = themeData.themes[cfg.theme || 'default'];
+          setThemeColors({
+            accent: t.accent || '#CC7832',
+            text: t.text || '#d4d4d8',
+            muted: t.muted || '#52525b',
+          });
+        }
+      } catch {}
+    } catch (e: any) {
+      console.error('Failed to load initial data:', e.message);
     }
   };
 
-  // Helper notice notification
-  const triggerNotification = (msg: string) => {
+  const refreshStatus = useCallback(async () => {
+    try {
+      const [s, cfg, cst] = await Promise.all([
+        api.status().catch(() => null),
+        api.getConfig().catch(() => ({})),
+        api.getCost().catch(() => null),
+      ]);
+      setStatus(s);
+      setConfig(cfg);
+      setCost(cst);
+    } catch {}
+  }, []);
+
+  const refreshSessions = useCallback(async () => {
+    try {
+      const sess = await api.getSessions();
+      setSessions(sess.sessions);
+    } catch {}
+  }, []);
+
+  const refreshConfig = useCallback(async () => {
+    try {
+      const cfg = await api.getConfig();
+      setConfig(cfg);
+    } catch {}
+  }, []);
+
+  // Trigger notification
+  const triggerNotification = useCallback((msg: string) => {
     setShowNotification(msg);
-    setTimeout(() => {
-      setShowNotification(null);
-    }, 3500);
+    setTimeout(() => setShowNotification(null), 3500);
+  }, []);
+
+  // Helpers
+  const getDefaultPrompt = () => {
+    if (!config.lang || config.lang === 'ru') {
+      return 'Как мне помочь с кодом?';
+    }
+    return 'How can I help with the code?';
   };
 
-  // Motion specifications tokens for premium feel
-  const springDefault = { type: 'spring', damping: 30, stiffness: 240 };
-  const springQuick = { type: 'spring', damping: 24, stiffness: 350 };
-  const cubicEaseApple = [0.16, 1, 0.3, 1]; // [duration handles are embedded automatically]
+  const getComposerPlaceholder = () => {
+    if (!status?.apiKeyConfigured) return '⚠️ Set up your API key in Settings to start chatting...';
+    return getDefaultPrompt();
+  };
+
+  // Handle creating new chat
+  const handleCreateNewChat = async () => {
+    try {
+      const result = await api.createSession();
+      const newId = result.sessionId;
+      
+      setCurrentSession(newId);
+      setSessionMessages(prev => ({
+        ...prev,
+        [newId]: [{
+          id: `init-${newId}`,
+          role: 'assistant',
+          content: config.lang === 'ru' 
+            ? 'Привет. Я подключён и готов. Напиши, что нужно сделать с кодом.'
+            : 'Hello. I\'m connected and ready. Tell me what to do with the code.',
+          timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })
+        }]
+      }));
+      setSessionTitles(prev => ({ ...prev, [newId]: 'New Chat' }));
+      
+      await refreshSessions();
+      triggerNotification('New chat created');
+    } catch (e: any) {
+      triggerNotification(`Error: ${e.message}`);
+    }
+  };
+
+  // Switch session
+  const handleSwitchSession = async (sessionId: string) => {
+    try {
+      const data = await api.loadSession(sessionId);
+      setCurrentSession(sessionId);
+      
+      if (data && data.messages) {
+        const msgs = data.messages.map((m: any, i: number) => ({
+          id: `msg-${sessionId}-${i}`,
+          role: m.role || 'user',
+          content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
+          timestamp: data.time ? new Date(data.time).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }) : '',
+        }));
+        setSessionMessages(prev => ({ ...prev, [sessionId]: msgs }));
+        
+        const firstUser = msgs.find(m => m.role === 'user');
+        if (firstUser) {
+          setSessionTitles(prev => ({ ...prev, [sessionId]: firstUser.content.slice(0, 40) }));
+        }
+      } else {
+        // Empty session
+        setSessionMessages(prev => ({
+          ...prev,
+          [sessionId]: [{
+            id: `init-${sessionId}`,
+            role: 'assistant',
+            content: config.lang === 'ru'
+              ? 'Привет. Я подключён и готов. Напиши, что нужно сделать с кодом.'
+              : 'Hello. I\'m connected and ready. Tell me what to do with the code.',
+            timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })
+          }]
+        }));
+      }
+      
+      triggerNotification('Switched chat context');
+    } catch (e: any) {
+      triggerNotification(`Error: ${e.message}`);
+    }
+  };
 
   // Handle composer submissions
-  const handleComposerSubmit = (e: React.FormEvent) => {
+  const handleComposerSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!composerVal.trim()) return;
+    if (!composerVal.trim() || thinkingState !== 'idle') return;
 
-    const typedMsg = composerVal;
+    const typedMsg = composerVal.trim();
+    
+    // Check if API key is configured
+    if (!status?.apiKeyConfigured) {
+      triggerNotification('⚠️ Configure your API key in Settings first');
+      return;
+    }
+
+    const timestamp = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
     
     // 1. Post user message instantly
     const userMsg: ChatMessage = {
-      id: `m-usr-${Date.now()}`,
+      id: `usr-${Date.now()}`,
       role: 'user',
       content: typedMsg,
-      timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })
+      timestamp,
     };
 
-    setThreads(prev => ({
+    const updatedMessages = [...(sessionMessages[currentSession] || []), userMsg];
+    setSessionMessages(prev => ({
       ...prev,
-      [currentSession]: [...(prev[currentSession] || []), userMsg]
+      [currentSession]: updatedMessages,
     }));
     setComposerVal('');
     setThinkingState('thinking');
+    setStreamingContent('');
 
-    // 2. Beautiful Claude Desktop style Shimmer Thinking timing
-    setTimeout(() => {
+    // Save session title
+    if (!sessionTitles[currentSession]) {
+      setSessionTitles(prev => ({ ...prev, [currentSession]: typedMsg.slice(0, 40) }));
+    }
+
+    // Build messages array for API
+    const apiMessages = updatedMessages
+      .filter(m => m.role !== 'system' || true)
+      .map(m => ({
+        role: m.role === 'assistant' ? 'assistant' : 'user',
+        content: m.content,
+      }));
+
+    // Add system prompt
+    const systemContent = config.profiles?.[config.profile || 'default']?.system || 
+      (config.lang === 'ru' 
+        ? 'Ты — опытный инженер-программист. Твои ответы кратки, точны и по существу.'
+        : 'You are an experienced software engineer. Your answers are concise, accurate, and to the point.');
+
+    apiMessages.unshift({ role: 'system', content: systemContent });
+
+    // Check if it's an autopilot request
+    const isAutopilotRequest = typedMsg.toLowerCase().includes('autopilot') || 
+                                typedMsg.toLowerCase().includes('refactor') ||
+                                typedMsg.toLowerCase().includes('автопилот');
+
+    try {
+      // 2. Stream the response
+      let fullResponse = '';
+      
       setThinkingState('streaming');
 
-      // 3. Apple/Claude style Blur-up enter flow
-      setTimeout(() => {
-        // Detect if user is talking about autopilot to auto-initiate a small card
-        const isAutopilotRequest = typedMsg.toLowerCase().includes('autopilot') || typedMsg.toLowerCase().includes('refactor');
-        
-        const assistantResult: ChatMessage = isAutopilotRequest ? {
-          id: `m-asst-${Date.now()}`,
-          role: 'assistant',
-          content: 'I have started Autopilot to address your caching request.',
-          timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }),
-          isAutopilotCard: true,
-          autopilotTitle: typedMsg,
-          autopilotStep: 'Step 1 of 4',
-          autopilotTotalSteps: 4,
-          autopilotStatus: 'running'
-        } : {
-          id: `m-asst-${Date.now()}`,
-          role: 'assistant',
-          content: `I have thoroughly updated components matching: "${typedMsg}". Standard local validations were resolved smoothly, ensuring clean runtime conditions.`,
-          timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }),
-          actions: [
-            { title: 'Edited app.tsx', sheetKey: 'edited-app' },
-            { title: 'Ran integration suite', sheetKey: 'ran-tests' }
-          ]
-        };
+      const controller = createChatStream(
+        apiMessages,
+        config.model,
+        (chunk) => {
+          fullResponse += chunk;
+          setStreamingContent(fullResponse);
+        },
+        (result) => {
+          // Done
+          const assistantMsg: ChatMessage = isAutopilotRequest ? {
+            id: `asst-${Date.now()}`,
+            role: 'assistant',
+            content: fullResponse || 'Task completed.',
+            timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }),
+            isAutopilotCard: true,
+            autopilotTitle: typedMsg,
+            autopilotStep: 'Step 1 of 4',
+            autopilotTotalSteps: 4,
+            autopilotStatus: 'running',
+          } : {
+            id: `asst-${Date.now()}`,
+            role: 'assistant',
+            content: fullResponse || 'No response generated.',
+            timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }),
+          };
 
-        setThreads(prev => ({
-          ...prev,
-          [currentSession]: [...(prev[currentSession] || []), assistantResult]
-        }));
-        setThinkingState('idle');
-        triggerNotification("Response received completely.");
-      }, 1500);
-
-    }, 2000);
-  };
-
-  const handleCreateNewChat = () => {
-    const newSessionId = `custom-chat-${Date.now()}`;
-    setThreads(prev => ({
-      ...prev,
-      [newSessionId]: [
-        {
-          id: 'init-one',
-          role: 'assistant',
-          content: 'Hello. I am connected and ready. Instruct Autopilot on specific code modifications or query workspace parameters.',
-          timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })
+          setSessionMessages(prev => ({
+            ...prev,
+            [currentSession]: [...(prev[currentSession] || []), assistantMsg],
+          }));
+          setStreamingContent('');
+          setThinkingState('idle');
+          refreshStatus();
+          refreshSessions();
+          triggerNotification('Response received');
+        },
+        (error) => {
+          // Error
+          const errorMsg: ChatMessage = {
+            id: `err-${Date.now()}`,
+            role: 'assistant',
+            content: `⚠️ Error: ${error}`,
+            timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }),
+          };
+          setSessionMessages(prev => ({
+            ...prev,
+            [currentSession]: [...(prev[currentSession] || []), errorMsg],
+          }));
+          setStreamingContent('');
+          setThinkingState('idle');
+          triggerNotification(`Error: ${error}`);
         }
-      ]
-    }));
-    setCurrentSession(newSessionId);
-    triggerNotification("New chat context initialized.");
+      );
+
+      abortRef.current = controller;
+    } catch (e: any) {
+      setThinkingState('idle');
+      setStreamingContent('');
+      triggerNotification(`Error: ${e.message}`);
+    }
   };
 
-  // Pre-configured planned steps for Scenario 3
-  const preConfiguredPlanSteps = [
-    { label: 'Inspect middleware files', status: 'completed' },
-    { label: 'Patch authorization token verify blocks', status: 'completed' },
-    { label: 'Run validation test suite', status: 'pending' },
-    { label: 'Verify cache locks in local environment', status: 'pending' }
-  ];
+  // Motion tokens
+  const springDefault = { type: 'spring', damping: 30, stiffness: 240 };
+  const springQuick = { type: 'spring', damping: 24, stiffness: 350 };
+
+  // Build message display
+  const currentMessages = sessionMessages[currentSession] || [];
+  const currentTitle = sessionTitles[currentSession] || 'New Chat';
+  const accentColor = themeColors.accent;
 
   return (
     <div className="min-h-screen bg-[#070709] text-[#ced4da] flex flex-col font-sans select-none antialiased relative overflow-hidden">
@@ -279,20 +405,43 @@ export default function App() {
         
         {/* Left branding context */}
         <div className="flex items-center gap-3">
-          <div className="w-5 h-5 rounded-md bg-zinc-900 border border-zinc-800 flex items-center justify-center font-bold text-[11px] text-[#ff7043]">
+          <div className="w-5 h-5 rounded-md bg-zinc-900 border border-zinc-800 flex items-center justify-center font-bold text-[11px]" style={{ color: accentColor }}>
             M
           </div>
           <span className="font-semibold text-xs text-white tracking-tight uppercase">Meow Core Client</span>
           <span className="h-3 w-[1px] bg-zinc-800" />
           <div className="flex items-center gap-1">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="text-[10px] text-zinc-500 font-mono">Agent Active</span>
+            <span className={`w-1.5 h-1.5 rounded-full ${status?.apiKeyConfigured ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'} `} />
+            <span className="text-[10px] text-zinc-500 font-mono">
+              {status?.apiKeyConfigured ? 'Agent Active' : 'No API Key'}
+            </span>
           </div>
+          {/* Model badge */}
+          {status?.activeModel && (
+            <>
+              <span className="h-3 w-[1px] bg-zinc-800" />
+              <span className="text-[10px] font-mono text-zinc-500">{status.activeModel}</span>
+            </>
+          )}
         </div>
 
          {/* Dynamic Context Buttons -> Trigger Right Sheet system */}
         <div className="flex items-center gap-2">
           
+          <motion.button 
+            whileHover={{ scale: 1.02, backgroundColor: 'rgba(24, 24, 31, 0.8)' }}
+            whileTap={{ scale: 0.98 }}
+            onClick={() => setActiveSheet(activeSheet === 'cost' ? null : 'cost')}
+            className={`text-xs px-2.5 py-1.5 rounded-lg font-semibold border transition cursor-pointer flex items-center gap-1.5 ${
+              activeSheet === 'cost' 
+                ? 'bg-[#18181f]/60 border-zinc-700 text-white' 
+                : 'bg-transparent border-zinc-900 text-zinc-400 hover:text-white'
+            }`}
+          >
+            <DollarSign className="w-3.5 h-3.5 opacity-60" />
+            <span>Cost</span>
+          </motion.button>
+
           <motion.button 
             whileHover={{ scale: 1.02, backgroundColor: 'rgba(24, 24, 31, 0.8)' }}
             whileTap={{ scale: 0.98 }}
@@ -310,15 +459,15 @@ export default function App() {
           <motion.button 
             whileHover={{ scale: 1.02, backgroundColor: 'rgba(24, 24, 31, 0.8)' }}
             whileTap={{ scale: 0.98 }}
-            onClick={() => setActiveSheet(activeSheet === 'changes' ? null : 'changes')}
+            onClick={() => setActiveSheet(activeSheet === 'settings' ? null : 'settings')}
             className={`text-xs px-3 py-1.5 rounded-lg font-semibold border transition cursor-pointer flex items-center gap-1.5 ${
-              activeSheet === 'changes' 
+              activeSheet === 'settings' 
                 ? 'bg-[#18181f]/60 border-zinc-700 text-white' 
                 : 'bg-transparent border-zinc-900 text-zinc-400 hover:text-white'
             }`}
           >
-            <Code className="w-3.5 h-3.5 opacity-60" />
-            <span>Changes</span>
+            <Settings className="w-3.5 h-3.5 opacity-60" />
+            <span>Settings</span>
           </motion.button>
         </div>
       </header>
@@ -332,7 +481,7 @@ export default function App() {
             
             <div className="space-y-6">
               
-              {/* Luxury Claude New Chat Button */}
+              {/* Luxury New Chat Button */}
               <motion.button 
                 whileHover={{ scale: 1.015 }}
                 whileTap={{ scale: 0.985 }}
@@ -346,133 +495,94 @@ export default function App() {
                 <span className="text-[10px] font-mono text-zinc-500 bg-zinc-950 px-1 py-0.5 border border-zinc-900 rounded select-none">⌘N</span>
               </motion.button>
 
+              {/* Search */}
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-zinc-500" />
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search chats..."
+                  className="w-full bg-zinc-950 border border-zinc-900 rounded-lg pl-7 pr-2 py-1.5 text-[10px] text-zinc-300 placeholder-zinc-600 focus:outline-none focus:border-zinc-700 transition"
+                />
+              </div>
+
               {/* Recent Chats */}
               <div className="space-y-1">
                 <div className="text-[9px] uppercase font-bold tracking-widest text-zinc-500 mb-2 px-1">
                   Recent Chats
                 </div>
                 
-                <motion.button 
-                  whileHover={{ x: 2 }}
-                  onClick={() => {
-                    setCurrentSession('crud-create');
-                    triggerNotification("Switched to Users CRUD context.");
-                  }}
-                  className={`w-full text-left px-3 py-2 rounded-xl flex items-center justify-between transition text-xs cursor-pointer ${
-                    currentSession === 'crud-create' 
-                      ? 'bg-[#111115] text-white font-medium border border-zinc-800/40' 
-                      : 'text-zinc-400 hover:bg-zinc-900/20 hover:text-zinc-200'
-                  }`}
-                >
-                  <div className="flex items-center gap-2 truncate">
-                    <MessageSquare className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-                    <span className="truncate">Create CRUD for users</span>
+                {sessions.length === 0 ? (
+                  <div className="text-[10px] text-zinc-600 px-3 py-4 text-center">
+                    No chats yet. Start a new one!
                   </div>
-                </motion.button>
-
-                <motion.button 
-                  whileHover={{ x: 2 }}
-                  onClick={() => {
-                    setCurrentSession('auth-debug');
-                    triggerNotification("Switched to Cache Lock debug sequence.");
-                  }}
-                  className={`w-full text-left px-3 py-2 rounded-xl flex items-center justify-between transition text-xs cursor-pointer ${
-                    currentSession === 'auth-debug' 
-                      ? 'bg-[#111115] text-white font-medium border border-zinc-800/40' 
-                      : 'text-zinc-400 hover:bg-zinc-900/20 hover:text-zinc-200'
-                  }`}
-                >
-                  <div className="flex items-center gap-2 truncate">
-                    <MessageSquare className="w-3.5 h-3.5 text-cyan-500 shrink-0" />
-                    <span className="truncate">Identify cache locks</span>
-                  </div>
-                </motion.button>
-
-                <motion.button 
-                  whileHover={{ x: 2 }}
-                  onClick={() => {
-                    setCurrentSession('auth-refactor');
-                    triggerNotification("Switched to Auth Middleware refactoring stream.");
-                  }}
-                  className={`w-full text-left px-3 py-2 rounded-xl flex items-center justify-between transition text-xs cursor-pointer ${
-                    currentSession === 'auth-refactor' 
-                      ? 'bg-[#111115] text-white font-medium border border-zinc-800/40' 
-                      : 'text-zinc-400 hover:bg-zinc-900/20 hover:text-zinc-200'
-                  }`}
-                >
-                  <div className="flex items-center gap-2 truncate">
-                    <MessageSquare className="w-3.5 h-3.5 text-emerald-505 shrink-0" />
-                    <span className="truncate">Refactor auth middleware</span>
-                  </div>
-                </motion.button>
+                ) : (
+                  sessions.slice(0, 20).map((sess) => {
+                    const title = sessionTitles[sess.id] || sess.id;
+                    const isActive = currentSession === sess.id;
+                    
+                    return (
+                      <motion.button 
+                        key={sess.id}
+                        whileHover={{ x: 2 }}
+                        onClick={() => handleSwitchSession(sess.id)}
+                        className={`w-full text-left px-3 py-2 rounded-xl flex items-center justify-between transition text-xs cursor-pointer ${
+                          isActive 
+                            ? 'bg-[#111115] text-white font-medium border border-zinc-800/40' 
+                            : 'text-zinc-400 hover:bg-zinc-900/20 hover:text-zinc-200'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 truncate">
+                          <MessageSquare className={`w-3.5 h-3.5 shrink-0 ${isActive ? 'text-amber-500' : 'text-zinc-500'}`} />
+                          <span className="truncate text-[11px]">{title}</span>
+                        </div>
+                        {isActive && (
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
+                        )}
+                      </motion.button>
+                    );
+                  })
+                )}
               </div>
 
-              {/* Projects */}
+              {/* System Info */}
               <div className="space-y-1">
                 <div className="text-[9px] uppercase font-bold tracking-widest text-[#4f4f5a] mb-2 px-1">
-                  Projects
+                  System
                 </div>
                 <div className="space-y-0.5">
-                  <motion.div 
-                    whileHover={{ x: 2 }}
-                    className="text-zinc-400 hover:text-zinc-200 text-xs px-3 py-1.5 rounded-lg flex items-center gap-2.5 cursor-pointer transition"
-                  >
+                  <div className="text-zinc-400 text-xs px-3 py-1.5 rounded-lg flex items-center gap-2.5">
                     <span className="w-1.5 h-1.5 rounded-full bg-zinc-650" />
-                    <span>Core Daemon</span>
-                  </motion.div>
-                  <motion.div 
-                    whileHover={{ x: 2 }}
-                    className="text-zinc-400 hover:text-zinc-200 text-xs px-3 py-1.5 rounded-lg flex items-center gap-2.5 cursor-pointer transition"
-                  >
-                    <span className="w-1.5 h-1.5 rounded-full bg-zinc-650" />
-                    <span>Mobile Interface</span>
-                  </motion.div>
+                    <span className="text-[10px]">
+                      {status?.activeModel || 'No model'} 
+                      <span className="text-zinc-600 ml-1">| {status?.lang === 'ru' ? 'RU' : 'EN'}</span>
+                    </span>
+                  </div>
+                  <div className="text-zinc-400 text-xs px-3 py-1.5 rounded-lg flex items-center gap-2.5">
+                    <span className={`w-1.5 h-1.5 rounded-full ${status?.apiKeyConfigured ? 'bg-emerald-500' : 'bg-red-500'}`} />
+                    <span className="text-[10px]">{status?.apiKeyConfigured ? 'API Connected' : 'No API Key'}</span>
+                  </div>
                 </div>
               </div>
-
-              {/* Assistants */}
-              <div className="space-y-1">
-                <div className="text-[9px] uppercase font-bold tracking-widest text-[#4f4f5a] mb-2 px-1">
-                  Assistants
-                </div>
-                <div className="space-y-0.5">
-                  <motion.div 
-                    whileHover={{ x: 2 }}
-                    className="text-zinc-400 hover:text-zinc-200 text-xs px-3 py-1.5 rounded-lg flex items-center gap-2.5 cursor-pointer transition"
-                  >
-                    <span className="text-sm">🤖</span>
-                    <span>Autopilot Architect</span>
-                  </motion.div>
-                  <motion.div 
-                    whileHover={{ x: 2 }}
-                    className="text-zinc-400 hover:text-zinc-200 text-xs px-3 py-1.5 rounded-lg flex items-center gap-2.5 cursor-pointer transition"
-                  >
-                    <span className="text-sm">⚙</span>
-                    <span>Spec Validator</span>
-                  </motion.div>
-                </div>
-              </div>
-
             </div>
 
             {/* Profile settings footer section */}
             <div className="pt-3 border-t border-zinc-900 flex items-center justify-between">
               <div className="flex items-center gap-2 truncate">
-                <div className="w-7 h-7 rounded-full bg-[#ff7043]/15 border border-[#ff7043]/25 flex items-center justify-center font-bold text-xs text-white">
+                <div className="w-7 h-7 rounded-full bg-amber-500/15 border border-amber-500/25 flex items-center justify-center font-bold text-xs text-white">
                   A
                 </div>
                 <div className="truncate">
                   <div className="text-xs font-semibold text-white truncate">Administrator</div>
-                  <div className="text-[10px] text-zinc-500 truncate">active-user@domain</div>
+                  <div className="text-[10px] text-zinc-500 truncate">{config.model || 'no model'}</div>
                 </div>
               </div>
               <motion.button 
                 whileHover={{ rotate: 15, scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
-                onClick={() => {
-                  setActiveSheet(activeSheet === 'context' ? null : 'context');
-                  triggerNotification("Accessing system parameters.");
-                }} 
+                onClick={() => setActiveSheet(activeSheet === 'settings' ? null : 'settings')}
                 className="p-1.5 rounded-lg hover:bg-zinc-900 border border-transparent hover:border-zinc-850 text-zinc-400 hover:text-white transition cursor-pointer"
               >
                 <Settings className="w-4 h-4" />
@@ -482,7 +592,7 @@ export default function App() {
           </div>
         </aside>
 
-        {/* CENTRAL CHAT CONTAINER (No metric-dashboards, pure chat experience) */}
+        {/* CENTRAL CHAT CONTAINER */}
         <section className="flex-1 flex flex-col bg-[#070709] min-w-0 relative">
           
           {/* Scrollable message deck */}
@@ -490,7 +600,7 @@ export default function App() {
             <div className="max-w-2xl mx-auto space-y-6">
 
               {/* Threads rendered with premium motion choreography */}
-              {(threads[currentSession] || []).map((msg) => {
+              {currentMessages.map((msg) => {
                 const isUser = msg.role === 'user';
                 
                 // If it is regular chat bubble
@@ -510,7 +620,7 @@ export default function App() {
                       }}
                       transition={{ 
                         duration: 0.55, 
-                        ease: [0.16, 1, 0.3, 1] // Apple Standard Ease Out
+                        ease: [0.16, 1, 0.3, 1]
                       }}
                       className="group/bubble flex gap-4 justify-start"
                     >
@@ -544,66 +654,13 @@ export default function App() {
                             {msg.content}
                           </div>
                         </div>
-
-                        {/* COMPACT ACTIVITY ROW (Scenario 2) */}
-                        {!isUser && msg.actions && msg.actions.length > 0 && (
-                          <div className="mt-2.5 pl-4">
-                            <button 
-                              onClick={() => setWorkedExpandedId(workedExpandedId === msg.id ? null : msg.id)}
-                              className="text-xs text-zinc-450 hover:text-white flex items-center gap-1.5 transition cursor-pointer"
-                            >
-                              <span>⚙ Worked ({msg.actions.length} actions)</span>
-                              <ChevronDown className={`w-3 h-3 transition-transform duration-300 ${workedExpandedId === msg.id ? 'rotate-180' : ''}`} />
-                            </button>
-
-                            {/* Collapsible Action list (Zero logs/JSON noise) */}
-                            <AnimatePresence>
-                              {workedExpandedId === msg.id && (
-                                <motion.div 
-                                  initial={{ height: 0, opacity: 0, scale: 0.98 }}
-                                  animate={{ height: 'auto', opacity: 1, scale: 1, marginTop: 10 }}
-                                  exit={{ height: 0, opacity: 0, scale: 0.98 }}
-                                  transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
-                                  className="overflow-hidden bg-[#0d0d11]/80 rounded-xl border border-zinc-900/80 p-2 max-w-md space-y-1"
-                                >
-                                  {msg.actions.map((act, idx) => (
-                                    <motion.div 
-                                      key={idx}
-                                      initial={{ opacity: 0, x: -4 }}
-                                      animate={{ opacity: 1, x: 0 }}
-                                      transition={{ delay: idx * 0.05, duration: 0.3 }}
-                                      className="flex items-center justify-between px-3 py-1.5 rounded-lg hover:bg-zinc-900 text-xs transition transition duration-150"
-                                    >
-                                      <span className="text-zinc-300">{act.title}</span>
-                                      
-                                      <button 
-                                        onClick={() => {
-                                          const details = actionDetailMap[act.sheetKey];
-                                          if (details) {
-                                            setSelectedActionDetail(details);
-                                            setActiveSheet('action-detail');
-                                            triggerNotification(`Pulled ${act.title} detail log representation`);
-                                          }
-                                        }}
-                                        className="text-zinc-500 hover:text-amber-500 flex items-center gap-0.5 transition cursor-pointer"
-                                      >
-                                        <span className="text-[10px]">Inspect</span>
-                                        <ChevronRight className="w-3.5 h-3.5" />
-                                      </button>
-                                    </motion.div>
-                                  ))}
-                                </motion.div>
-                              )}
-                            </AnimatePresence>
-                          </div>
-                        )}
                       </div>
 
                     </motion.div>
                   );
                 }
 
-                // ELSE IF IT IS INTERACTIVE AUTOPILOT CARD
+                // Autopilot Card
                 return (
                   <motion.div 
                     key={msg.id} 
@@ -630,7 +687,7 @@ export default function App() {
                           </span>
                         </div>
 
-                        {/* Tiny pause button inside the card */}
+                        {/* Tiny pause button */}
                         <button 
                           onClick={() => {
                             setAutopilotPaused(!autopilotPaused);
@@ -662,7 +719,12 @@ export default function App() {
                               transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
                               className="overflow-hidden space-y-1.5"
                             >
-                              {preConfiguredPlanSteps.map((step, idx) => (
+                              {[
+                                { label: 'Analyze requirements', status: 'completed' },
+                                { label: 'Implement changes', status: 'pending' },
+                                { label: 'Run validation', status: 'pending' },
+                                { label: 'Verify results', status: 'pending' },
+                              ].map((step, idx) => (
                                 <motion.div 
                                   key={idx}
                                   initial={{ opacity: 0, x: -6 }}
@@ -690,9 +752,37 @@ export default function App() {
                 );
               })}
 
-              {/* CLAUDE SHIMMER THINKING BUBBLE (Scenario 1) */}
+              {/* Streaming content bubble */}
               <AnimatePresence>
-                {thinkingState === 'thinking' && (
+                {streamingContent && (
+                  <motion.div 
+                    initial={{ opacity: 0, y: 8, filter: 'blur(6px)' }}
+                    animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+                    transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
+                    className="flex gap-4 justify-start"
+                  >
+                    <div className="w-8 h-8 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center shrink-0">
+                      <Sparkles className="w-4 h-4 text-amber-500" />
+                    </div>
+                    <div className="flex-1 min-w-0 pr-12">
+                      <div className="rounded-xl p-4 text-xs leading-relaxed border bg-transparent border-transparent text-zinc-200">
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="font-semibold text-xs text-white">Agent</span>
+                          <span className="text-[10px] text-zinc-500 font-mono">streaming...</span>
+                        </div>
+                        <div className="font-sans whitespace-pre-wrap selection:bg-zinc-850">
+                          {streamingContent}
+                          <span className="inline-block w-1.5 h-4 bg-amber-500/60 ml-0.5 animate-pulse rounded-sm" />
+                        </div>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* CLAUDE SHIMMER THINKING BUBBLE */}
+              <AnimatePresence>
+                {thinkingState === 'thinking' && !streamingContent && (
                   <motion.div 
                     initial={{ opacity: 0, y: 12, filter: 'blur(4px)' }}
                     animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
@@ -715,31 +805,11 @@ export default function App() {
                 )}
               </AnimatePresence>
 
-              {/* APPLE / CLAUDE LUXURY BLUR STREAMING RESPONSE */}
-              <AnimatePresence>
-                {thinkingState === 'streaming' && (
-                  <motion.div 
-                    initial={{ opacity: 0, y: 12, filter: 'blur(8px)' }}
-                    animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-                    exit={{ opacity: 0, y: -4, filter: 'blur(6px)' }}
-                    transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-                    className="flex gap-4 justify-start"
-                  >
-                    <div className="w-8 h-8 rounded-lg bg-zinc-900 border border-zinc-805 flex items-center justify-center shrink-0">
-                      <Sparkles className="w-4 h-4 text-[#ff7043]" />
-                    </div>
-
-                    <div className="flex-1 max-w-md bg-[#0d0d11]/80 border border-zinc-900 rounded-xl p-4">
-                      <span className="text-xs text-zinc-450 font-medium">Resolving workspace parameters files...</span>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
+              <div ref={messagesEndRef} />
             </div>
           </div>
 
-          {/* COMPOSER FIELD AT BOTTOM (Minimal, central) */}
+          {/* COMPOSER FIELD AT BOTTOM */}
           <div className="p-6 border-t border-[#141418]/60 bg-[#070709] shrink-0">
             <div className="max-w-2xl mx-auto w-full">
               <form 
@@ -750,7 +820,7 @@ export default function App() {
                   rows={2}
                   value={composerVal}
                   onChange={(e) => setComposerVal(e.target.value)}
-                  placeholder={currentSession === 'auth-refactor' ? 'Send guidance to the agent...' : 'How should Meow adjust the codebase?'}
+                  placeholder={getComposerPlaceholder()}
                   className="w-full bg-transparent border-0 text-xs text-white placeholder-zinc-500 focus:ring-0 focus:outline-none resize-none px-2 py-1 leading-relaxed"
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
@@ -758,6 +828,7 @@ export default function App() {
                       handleComposerSubmit(e);
                     }
                   }}
+                  disabled={!status?.apiKeyConfigured}
                 />
                 
                 <div className="flex items-center justify-between border-t border-zinc-950/40 pt-2 px-2 mt-1">
@@ -765,16 +836,31 @@ export default function App() {
                     <span className="text-[9px] font-mono text-zinc-500 bg-zinc-950 px-1.5 py-0.5 rounded border border-zinc-900">
                       Enter
                     </span>
-                    <span className="text-[10px] text-zinc-500">to write code</span>
+                    <span className="text-[10px] text-zinc-500">to send message</span>
+                    {!status?.apiKeyConfigured && (
+                      <span className="text-[10px] text-red-400 flex items-center gap-1">
+                        <Key className="w-3 h-3" />
+                        Set API key in Settings
+                      </span>
+                    )}
                   </div>
 
                   <button
                     type="submit"
-                    disabled={thinkingState !== 'idle' || !composerVal.trim()}
+                    disabled={thinkingState !== 'idle' || !composerVal.trim() || !status?.apiKeyConfigured}
                     className="bg-zinc-100 hover:bg-white text-zinc-950 disabled:opacity-20 font-semibold text-xs px-3.5 py-1.5 rounded-lg flex items-center gap-1.5 transition"
                   >
-                    <span>Send Message</span>
-                    <ArrowUpRight className="w-3 h-3" />
+                    {thinkingState !== 'idle' ? (
+                      <>
+                        <RefreshCw className="w-3 h-3 animate-spin" />
+                        <span>Thinking...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>Send Message</span>
+                        <ArrowUpRight className="w-3 h-3" />
+                      </>
+                    )}
                   </button>
                 </div>
               </form>
@@ -783,7 +869,7 @@ export default function App() {
 
         </section>
 
-        {/* 3. ARC & LINEAR STYLE FLUid POWER DRAWER (RIGHT SHEET SYSTEM) */}
+        {/* 3. RIGHT SHEET SYSTEM */}
         <AnimatePresence>
           {activeSheet && (
             <>
@@ -804,67 +890,286 @@ export default function App() {
                 transition={{ type: 'spring', damping: 28, stiffness: 220 }}
                 className="fixed right-0 top-0 bottom-0 w-full sm:w-[480px] bg-[#09090c] border-l border-zinc-900 shadow-soft z-40 flex flex-col overflow-hidden"
               >
-                {/* Header */}
-                <div className="px-5 py-4 border-b border-zinc-900 bg-[#070709] flex items-center justify-between shrink-0">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-[#ff7043]" />
-                    <h4 className="font-semibold text-xs tracking-wider uppercase text-white">
-                      {activeSheet === 'changes' ? 'Diff Review' :
-                       activeSheet === 'context' ? 'System Context' : 'Action Details'}
-                    </h4>
-                  </div>
+                {/* ── SETTINGS SHEET ── */}
+                {activeSheet === 'settings' && (
+                  <SettingsPanel 
+                    onClose={() => setActiveSheet(null)} 
+                    onConfigChange={refreshConfig}
+                  />
+                )}
 
-                  <button 
-                    onClick={() => setActiveSheet(null)}
-                    className="p-1.5 rounded-lg hover:bg-zinc-900 text-zinc-500 hover:text-white transition cursor-pointer"
-                  >
-                    ✕
-                  </button>
-                </div>
-
-                {/* Body Content */}
-                <div className="flex-1 overflow-y-auto p-5 space-y-6">
-
-                  {/* 3a. CHANGES DIFFERENTIAL SHEETS */}
-                  {activeSheet === 'changes' && (
-                    <div className="space-y-4">
-                      
-                      <div className="p-4 bg-zinc-900/40 border border-zinc-900 rounded-xl space-y-1">
-                        <span className="text-[10px] text-zinc-500 uppercase tracking-widest font-mono font-bold">Staged Changesets</span>
-                        <p className="text-xs text-zinc-350 font-medium">Branch: feature/concurrent-caches</p>
+                {/* ── COST SHEET ── */}
+                {activeSheet === 'cost' && (
+                  <>
+                    <div className="px-5 py-4 border-b border-zinc-900 bg-[#070709] flex items-center justify-between shrink-0">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                        <h4 className="font-semibold text-xs tracking-wider uppercase text-white">Cost & Usage</h4>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <button 
+                          onClick={async () => {
+                            const fresh = await api.getCost().catch(() => null);
+                            if (fresh) setCost(fresh);
+                          }}
+                          className="p-1.5 rounded-lg hover:bg-zinc-900 text-zinc-500 hover:text-white transition cursor-pointer"
+                        >
+                          <RefreshCw className="w-3.5 h-3.5" />
+                        </button>
+                        <button 
+                          onClick={() => setActiveSheet(null)}
+                          className="p-1.5 rounded-lg hover:bg-zinc-900 text-zinc-500 hover:text-white transition cursor-pointer"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    </div>
+                    
+                    <div className="flex-1 overflow-y-auto p-5 space-y-6">
+                      {/* Session Cost */}
+                      <div className="space-y-2">
+                        <div className="text-[10px] font-mono uppercase tracking-widest text-emerald-500 font-bold">Session Usage</div>
+                        <div className="p-4 bg-zinc-900/40 border border-zinc-900 rounded-xl space-y-2">
+                          <div className="flex justify-between text-xs">
+                            <span className="text-zinc-500">Requests</span>
+                            <span className="text-zinc-200 font-mono">{cost?.session?.requests || 0}</span>
+                          </div>
+                          <div className="flex justify-between text-xs">
+                            <span className="text-zinc-500">Input tokens</span>
+                            <span className="text-zinc-200 font-mono">{(cost?.session?.input_tokens || 0).toLocaleString()}</span>
+                          </div>
+                          <div className="flex justify-between text-xs">
+                            <span className="text-zinc-500">Output tokens</span>
+                            <span className="text-zinc-200 font-mono">{(cost?.session?.output_tokens || 0).toLocaleString()}</span>
+                          </div>
+                          <div className="border-t border-zinc-800 pt-2 flex justify-between text-xs">
+                            <span className="text-zinc-400 font-semibold">Estimated cost</span>
+                            <span className="text-amber-400 font-mono font-bold">${(cost?.session?.total_usd || 0).toFixed(4)}</span>
+                          </div>
+                        </div>
                       </div>
 
-                      {/* File deltas */}
+                      {/* Total Cost */}
+                      <div className="space-y-2">
+                        <div className="text-[10px] font-mono uppercase tracking-widest text-zinc-500 font-bold">All Time</div>
+                        <div className="p-4 bg-zinc-900/40 border border-zinc-900 rounded-xl space-y-2">
+                          <div className="flex justify-between text-xs">
+                            <span className="text-zinc-500">Requests</span>
+                            <span className="text-zinc-200 font-mono">{cost?.total?.requests || 0}</span>
+                          </div>
+                          <div className="flex justify-between text-xs">
+                            <span className="text-zinc-500">Total tokens</span>
+                            <span className="text-zinc-200 font-mono">{((cost?.total?.input_tokens || 0) + (cost?.total?.output_tokens || 0)).toLocaleString()}</span>
+                          </div>
+                          <div className="border-t border-zinc-800 pt-2 flex justify-between text-xs">
+                            <span className="text-zinc-400 font-semibold">Total cost</span>
+                            <span className="text-amber-400 font-mono font-bold">${(cost?.total?.total_usd || 0).toFixed(4)}</span>
+                          </div>
+                          {cost?.total?.since && (
+                            <div className="flex justify-between text-[10px]">
+                              <span className="text-zinc-600">Since</span>
+                              <span className="text-zinc-500 font-mono">{new Date(cost.total.since).toLocaleDateString()}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Recent History */}
+                      {cost?.history && cost.history.length > 0 && (
+                        <div className="space-y-2">
+                          <div className="text-[10px] font-mono uppercase tracking-widest text-zinc-500 font-bold">Recent Requests</div>
+                          <div className="space-y-1">
+                            {[...cost.history].reverse().slice(0, 10).map((entry: any, i: number) => (
+                              <div key={i} className="p-2.5 bg-zinc-950 border border-zinc-900 rounded-lg text-[10px] font-mono">
+                                <div className="flex justify-between text-zinc-400">
+                                  <span className="text-zinc-500">{entry.model}</span>
+                                  <span className="text-zinc-600">{new Date(entry.time).toLocaleTimeString()}</span>
+                                </div>
+                                <div className="flex justify-between text-zinc-500 mt-1">
+                                  <span>{entry.input_tokens}→{entry.output_tokens} tok</span>
+                                  <span className={entry.cost_usd > 0.01 ? 'text-amber-500' : 'text-zinc-500'}>
+                                    ${entry.cost_usd.toFixed(4)}
+                                  </span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Model Prices */}
+                      {cost?.modelPrices && (
+                        <div className="space-y-2">
+                          <div className="text-[10px] font-mono uppercase tracking-widest text-zinc-500 font-bold">Model Pricing ($/1M tok)</div>
+                          <div className="grid grid-cols-1 gap-1">
+                            {Object.entries(cost.modelPrices).filter(([k]) => !k.startsWith('_')).slice(0, 8).map(([model, price]: [string, any]) => (
+                              <div key={model} className="flex justify-between px-3 py-1.5 bg-zinc-950 border border-zinc-900 rounded-lg text-[10px] font-mono text-zinc-400">
+                                <span>{model}</span>
+                                <span className="text-zinc-500">${price.input}/$ {price.output}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      <button 
+                        onClick={async () => {
+                          await api.resetCost();
+                          const fresh = await api.getCost();
+                          setCost(fresh);
+                          triggerNotification('Cost tracking reset');
+                        }}
+                        className="w-full p-2.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-xl text-xs text-zinc-400 hover:text-white transition cursor-pointer flex items-center justify-center gap-2"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        Reset Cost Tracking
+                      </button>
+                    </div>
+                  </>
+                )}
+
+                {/* ── CONTEXT SHEET ── */}
+                {activeSheet === 'context' && (
+                  <>
+                    <div className="px-5 py-4 border-b border-zinc-900 bg-[#070709] flex items-center justify-between shrink-0">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-[#ff7043]" />
+                        <h4 className="font-semibold text-xs tracking-wider uppercase text-white">System Context</h4>
+                      </div>
+                      <button 
+                        onClick={() => setActiveSheet(null)}
+                        className="p-1.5 rounded-lg hover:bg-zinc-900 text-zinc-500 hover:text-white transition cursor-pointer"
+                      >
+                        ✕
+                      </button>
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto p-5 space-y-6">
+                      
+                      {/* System Prompt */}
+                      <div className="space-y-2">
+                        <div className="text-[10px] font-mono uppercase tracking-widest text-[#ff7043] font-bold">Active Profile</div>
+                        <div className="p-3.5 bg-zinc-950 border border-zinc-900 rounded-xl">
+                          <div className="text-xs text-zinc-300 font-semibold mb-1 capitalize">
+                            {config.profile || 'default'}
+                          </div>
+                          <div className="font-mono text-[10px] text-zinc-400 leading-relaxed max-h-32 overflow-y-auto">
+                            {config.profiles?.[config.profile || 'default']?.system || 
+                             (config.lang === 'ru'
+                               ? 'Ты — опытный инженер-программист. Твои ответы кратки, точны и по существу.'
+                               : 'You are an experienced software engineer. Your answers are concise, accurate, and to the point.')}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Active Config */}
+                      <div className="space-y-2">
+                        <div className="text-[10px] font-mono uppercase tracking-widest text-zinc-500 font-bold">Active Configuration</div>
+                        <div className="p-3.5 bg-zinc-950 border border-zinc-900 rounded-xl space-y-2">
+                          <div className="flex justify-between text-xs">
+                            <span className="text-zinc-500">Model</span>
+                            <span className="text-zinc-300 font-mono">{config.model || '—'}</span>
+                          </div>
+                          <div className="flex justify-between text-xs">
+                            <span className="text-zinc-500">API Base</span>
+                            <span className="text-zinc-300 font-mono text-[10px]">{config.api_base || '—'}</span>
+                          </div>
+                          <div className="flex justify-between text-xs">
+                            <span className="text-zinc-500">Temperature</span>
+                            <span className="text-zinc-300 font-mono">{config.profiles?.[config.profile || 'default']?.temperature || '0.2'}</span>
+                          </div>
+                          <div className="flex justify-between text-xs">
+                            <span className="text-zinc-500">Theme</span>
+                            <span className="text-zinc-300 font-mono capitalize">{config.theme || 'default'}</span>
+                          </div>
+                          <div className="flex justify-between text-xs">
+                            <span className="text-zinc-500">Language</span>
+                            <span className="text-zinc-300 font-mono">{config.lang === 'ru' ? 'Русский' : 'English'}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Status */}
+                      <div className="space-y-2">
+                        <div className="text-[10px] font-mono uppercase tracking-widest text-zinc-500 font-bold">System Status</div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="p-3 bg-zinc-950 border border-zinc-900 rounded-xl">
+                            <div className="text-[9px] uppercase text-zinc-600 font-bold mb-1">API Key</div>
+                            <div className="flex items-center gap-1.5">
+                              <span className={`w-1.5 h-1.5 rounded-full ${status?.apiKeyConfigured ? 'bg-emerald-500' : 'bg-red-500'}`} />
+                              <span className="text-xs text-zinc-300">{status?.apiKeyConfigured ? 'Configured' : 'Missing'}</span>
+                            </div>
+                          </div>
+                          <div className="p-3 bg-zinc-950 border border-zinc-900 rounded-xl">
+                            <div className="text-[9px] uppercase text-zinc-600 font-bold mb-1">Sessions</div>
+                            <span className="text-xs text-zinc-300">{status?.sessionsCount || 0} saved</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Profile Info */}
+                      <div className="space-y-1">
+                        <div className="text-[10px] font-mono uppercase tracking-widest text-zinc-500 font-bold">Available Profiles</div>
+                        {Object.keys(config.profiles || {}).length > 0 ? (
+                          Object.entries(config.profiles as Record<string, any>).map(([name, prof]) => (
+                            <div key={name} className="p-2.5 bg-zinc-950 border border-zinc-900 rounded-lg text-xs flex items-center justify-between">
+                              <span className="text-zinc-300 capitalize">{name}</span>
+                              <span className="text-zinc-500 text-[10px]">
+                                t={prof.temperature || '0.2'}
+                              </span>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="text-[10px] text-zinc-600 px-1">No custom profiles</div>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {/* ── CHANGES SHEET ── */}
+                {activeSheet === 'changes' && (
+                  <>
+                    <div className="px-5 py-4 border-b border-zinc-900 bg-[#070709] flex items-center justify-between shrink-0">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                        <h4 className="font-semibold text-xs tracking-wider uppercase text-white">Diff Review</h4>
+                      </div>
+                      <button 
+                        onClick={() => setActiveSheet(null)}
+                        className="p-1.5 rounded-lg hover:bg-zinc-900 text-zinc-500 hover:text-white transition cursor-pointer"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                    
+                    <div className="flex-1 overflow-y-auto p-5 space-y-4">
+                      <div className="p-4 bg-zinc-900/40 border border-zinc-900 rounded-xl space-y-1">
+                        <span className="text-[10px] text-zinc-500 uppercase tracking-widest font-mono font-bold">Staged Changesets</span>
+                        <p className="text-xs text-zinc-350 font-medium">Branch: feature/current</p>
+                      </div>
+
                       <div className="bg-zinc-950 border border-zinc-900 rounded-xl p-3.5 space-y-3">
                         <div className="text-[10px] uppercase font-bold text-zinc-550">File System Modifications</div>
-                        
                         <div className="flex items-center justify-between text-xs py-1 text-zinc-300">
                           <span className="font-mono">src/core/autopilot.ts</span>
                           <span className="font-mono text-[10px] text-emerald-500">+18 -7 lines</span>
                         </div>
-                        
                         <div className="flex items-center justify-between text-xs py-1 text-zinc-300">
                           <span className="font-mono">package.json</span>
                           <span className="font-mono text-[10px] text-emerald-500">+3 -0 lines</span>
                         </div>
                       </div>
 
-                      {/* Unified visual Diff */}
                       <div className="rounded-xl border border-zinc-900 bg-zinc-950 overflow-hidden font-mono text-[11px] leading-relaxed">
                         <div className="px-3 py-2 bg-zinc-900/60 border-b border-zinc-900 text-zinc-400 text-[10px] flex justify-between">
                           <span>diff --git a/src/core/autopilot.ts</span>
                           <span className="text-emerald-500">Proposed</span>
                         </div>
-                        
                         <div className="p-4 space-y-2 select-text overflow-x-auto">
                           <div className="bg-red-950/20 text-red-400 p-2 border-l border-red-800 rounded">
                             <span className="text-red-600 font-bold select-none mr-2">-</span>
                             <span>const data = fs.readFileSync(path, 'utf8');</span>
-                          </div>
-                          
-                          <div className="bg-emerald-950/20 text-emerald-400 p-2 border-l border-emerald-600 rounded">
-                            <span className="text-emerald-500 font-bold select-none mr-2">+</span>
-                            <span>const guard = await lockQueue.acquire();</span>
                           </div>
                           <div className="bg-emerald-950/20 text-emerald-400 p-2 border-l border-emerald-600 rounded">
                             <span className="text-emerald-500 font-bold select-none mr-2">+</span>
@@ -873,79 +1178,31 @@ export default function App() {
                         </div>
                       </div>
                     </div>
-                  )}
+                  </>
+                )}
 
-                  {/* 3b. GLOBAL SYSTEM CONTEXT SHEETS */}
-                  {activeSheet === 'context' && (
-                    <div className="space-y-6">
-
-                      {/* System Prompt */}
-                      <div className="space-y-2">
-                        <div className="text-[10px] font-mono uppercase tracking-widest text-[#ff7043] font-bold">System Prompt Parameters</div>
-                        <div className="p-3.5 bg-zinc-950 border border-zinc-900 rounded-xl font-mono text-[10px] text-zinc-400 leading-relaxed max-h-40 overflow-y-auto">
-                          "You are Meow Autonomous Core, a senior systems engineer. Minimize visual noise. Adhere to strict clean TypeScript limits. Eliminate telemetry clutter from outer rails."
-                        </div>
+                {/* ── ACTION DETAIL SHEET ── */}
+                {activeSheet === 'action-detail' && selectedActionDetail && (
+                  <>
+                    <div className="px-5 py-4 border-b border-zinc-900 bg-[#070709] flex items-center justify-between shrink-0">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-[#ff7043]" />
+                        <h4 className="font-semibold text-xs tracking-wider uppercase text-white">Action Details</h4>
                       </div>
-
-                      {/* Active Workspace Files */}
-                      <div className="space-y-2">
-                        <div className="text-[10px] font-mono uppercase tracking-widest text-zinc-500 font-bold">Workspace Repository Layer</div>
-                        
-                        <div className="space-y-1">
-                          {[
-                            'src/core/users.ts',
-                            'src/core/autopilot.ts',
-                            'src/core/locks.ts',
-                            'src/App.tsx',
-                            'package.json'
-                          ].map((fpath, idx) => (
-                            <div key={idx} className="flex items-center justify-between p-2 rounded-lg bg-zinc-950/40 text-xs border border-transparent hover:border-zinc-900 hover:bg-zinc-900/30 transition">
-                              <span className="font-mono text-zinc-300">{fpath}</span>
-                              <FileText className="w-3.5 h-3.5 text-zinc-650" />
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Learned Retained Memory */}
-                      <div className="space-y-2">
-                        <div className="text-[10px] font-mono uppercase tracking-widest text-zinc-500 font-bold">Autonomous Memory Rules</div>
-                        
-                        {[
-                          'Avoid standard blocking loops synchronously to preserve CPU performance.',
-                          'Use concurrent mutex locks when writing logging variables to the file structure.',
-                          'Favor functional React hooks and motion layout transformations.'
-                        ].map((rule, idx) => (
-                          <div key={idx} className="p-3 bg-zinc-950 border border-zinc-900 rounded-xl text-xs text-zinc-400">
-                            {rule}
-                          </div>
-                        ))}
-                      </div>
-
-                      {/* Active Tools list */}
-                      <div className="space-y-2">
-                        <div className="text-[10px] font-mono uppercase tracking-widest text-zinc-500 font-bold">Authorized Integrations</div>
-                        <div className="grid grid-cols-2 gap-2 text-xs">
-                          <div className="p-2.5 bg-zinc-950 border border-zinc-900 rounded-lg text-zinc-455">view_file</div>
-                          <div className="p-2.5 bg-zinc-950 border border-zinc-900 rounded-lg text-zinc-455">patch_file</div>
-                          <div className="p-2.5 bg-zinc-950 border border-zinc-900 rounded-lg text-zinc-455">run_shell</div>
-                          <div className="p-2.5 bg-zinc-950 border border-zinc-900 rounded-lg text-zinc-445">grep</div>
-                        </div>
-                      </div>
-
+                      <button 
+                        onClick={() => setActiveSheet(null)}
+                        className="p-1.5 rounded-lg hover:bg-zinc-900 text-zinc-500 hover:text-white transition cursor-pointer"
+                      >
+                        ✕
+                      </button>
                     </div>
-                  )}
-
-                  {/* 3c. DETAILED ACTION SHEET */}
-                  {activeSheet === 'action-detail' && selectedActionDetail && (
-                    <div className="space-y-6">
-                      
+                    
+                    <div className="flex-1 overflow-y-auto p-5 space-y-6">
                       <div className="space-y-1">
                         <h3 className="text-sm font-semibold text-white">{selectedActionDetail.title}</h3>
                         <span className="text-[10px] text-zinc-550 uppercase tracking-widest font-mono">Detailed Action Record</span>
                       </div>
 
-                      {/* Summary points */}
                       <div className="space-y-2">
                         <div className="text-[10px] font-mono uppercase tracking-widest text-[#ff7043] font-bold">Action Summary</div>
                         <div className="p-4 bg-zinc-950 border border-zinc-900 rounded-xl space-y-2 text-xs">
@@ -958,7 +1215,6 @@ export default function App() {
                         </div>
                       </div>
 
-                      {/* Impacted files */}
                       <div className="space-y-2">
                         <div className="text-[10px] font-mono uppercase tracking-widest text-zinc-500 font-bold">Files Impacted</div>
                         <div className="space-y-1.5">
@@ -971,7 +1227,6 @@ export default function App() {
                         </div>
                       </div>
 
-                      {/* Tool logs */}
                       <div className="space-y-2">
                         <div className="text-[10px] font-mono uppercase tracking-widest text-zinc-500 font-bold">Associated Tool Actions</div>
                         <div className="space-y-2">
@@ -982,17 +1237,16 @@ export default function App() {
                                 <span className="text-[9px] text-[#ff7043] font-bold select-none">Executed</span>
                               </div>
                               <div className="p-3 bg-zinc-950 text-zinc-500 text-[10px]">
-                                Simulated invocation records for local testing environments pass cleanly. No anomalies detected.
+                                Command executed successfully in local environment.
                               </div>
                             </div>
                           ))}
                         </div>
                       </div>
-
                     </div>
-                  )}
+                  </>
+                )}
 
-                </div>
               </motion.aside>
             </>
           )}
@@ -1003,14 +1257,16 @@ export default function App() {
       {/* 4. PREMIUM FLOATING TOAST NOTIFICATION */}
       <AnimatePresence>
         {showNotification && (
-          <motion.div 
-            initial={{ opacity: 0, y: 15 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            className="fixed bottom-6 right-6 bg-[#0f0f13] border border-zinc-850 px-4 py-3 rounded-xl shadow-soft z-50 flex items-center gap-2.5 max-w-sm"
+          <motion.div
+            key={`notif-${Date.now()}`}
+            initial={{ opacity: 0, y: 20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -10, scale: 0.95 }}
+            transition={{ type: 'spring', damping: 24, stiffness: 300 }}
+            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-zinc-900/90 backdrop-blur-sm border border-zinc-800/60 rounded-xl px-5 py-2.5 shadow-2xl flex items-center gap-2.5 text-xs text-zinc-200"
           >
-            <Sparkles className="w-4 h-4 text-emerald-400 shrink-0" />
-            <span className="text-xs text-zinc-300 leading-normal font-sans font-medium">{showNotification}</span>
+            <div className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+            <span>{showNotification}</span>
           </motion.div>
         )}
       </AnimatePresence>
