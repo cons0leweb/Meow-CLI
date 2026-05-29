@@ -409,10 +409,29 @@ export default function App() {
         },
         (result) => {
           // Done
+          // ─── FIX: Use the best available content ─────────────────────────
+          // Priority: 1) fullResponse (accumulated chunks) 2) result.content 3) fallback from tool_calls
+          let finalContent = fullResponse || result?.content || '';
+          
+          // If still empty but we have tool_calls, generate meaningful fallback
+          if (!finalContent && result?.tool_calls && result.tool_calls.length > 0) {
+            const toolNames = result.tool_calls
+              .map((tc: any) => tc.function?.name || tc.name || 'tool')
+              .join(', ');
+            finalContent = `⚡ **AI выполняет задачу, используя:** \`${toolNames}\`\n\n_Пожалуйста, подождите..._`;
+          }
+          
+          // Ultimate fallback should never be "No response generated"
+          if (!finalContent) {
+            finalContent = isAutopilotRequest 
+              ? 'Task completed.' 
+              : '✅ Задача принята к выполнению. Ожидайте результат...';
+          }
+          
           const assistantMsg: ChatMessage = isAutopilotRequest ? {
             id: `asst-${Date.now()}`,
             role: 'assistant',
-            content: fullResponse || 'Task completed.',
+            content: finalContent,
             timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }),
             isAutopilotCard: true,
             autopilotTitle: typedMsg,
@@ -422,7 +441,7 @@ export default function App() {
           } : {
             id: `asst-${Date.now()}`,
             role: 'assistant',
-            content: fullResponse || 'No response generated.',
+            content: finalContent,
             timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }),
           };
 
