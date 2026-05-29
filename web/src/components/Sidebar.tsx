@@ -74,17 +74,15 @@ export function Sidebar({
                     <span className="truncate">{session.chat || `Session ${session.id.slice(0, 8)}`}</span>
                   </div>
 
-                  {!['crud-create', 'auth-debug', 'auth-refactor'].includes(session.id) && (
-                    <button 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onDeleteSession(session.id);
-                      }}
-                      className="opacity-0 group-hover:opacity-100 hover:text-red-400 p-0.5 rounded transition shrink-0 cursor-pointer"
-                    >
-                      <X className="w-2.5 h-2.5" />
-                    </button>
-                  )}
+                  <button 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDeleteSession(session.id);
+                    }}
+                    className="opacity-0 group-hover:opacity-100 hover:text-red-400 p-0.5 rounded transition shrink-0 cursor-pointer"
+                  >
+                    <X className="w-2.5 h-2.5" />
+                  </button>
                 </motion.div>
               ))}
             </div>
