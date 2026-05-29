@@ -151,14 +151,22 @@ export default function App() {
   const springQuick = { type: 'spring', damping: 24, stiffness: 350 };
   const cubicEaseApple = [0.16, 1, 0.3, 1]; // [duration handles are embedded automatically]
 
-  // Handle composer submissions
+  // Handle composer submissions via real API
   const handleComposerSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!composerVal.trim()) return;
 
     const typedMsg = composerVal;
     
-    // 1. Post user message instantly
+    // Build messages array for the API
+    const existingMessages = threads[currentSession] || [];
+    const apiMessages = existingMessages.map(m => ({
+      role: m.role,
+      content: m.content,
+    }));
+    apiMessages.push({ role: 'user', content: typedMsg });
+
+    // Post user message instantly
     const userMsg: ChatMessage = {
       id: `m-usr-${Date.now()}`,
       role: 'user',
@@ -171,47 +179,64 @@ export default function App() {
       [currentSession]: [...(prev[currentSession] || []), userMsg]
     }));
     setComposerVal('');
-    setThinkingState('thinking');
+    setThinkingState('streaming');
 
-    // 2. Beautiful Claude Desktop style Shimmer Thinking timing
-    setTimeout(() => {
-      setThinkingState('streaming');
+    // Stream response from real API
+    let responseContent = '';
+    const assistantId = `m-asst-${Date.now()}`;
 
-      // 3. Apple/Claude style Blur-up enter flow
-      setTimeout(() => {
-        // Detect if user is talking about autopilot to auto-initiate a small card
-        const isAutopilotRequest = typedMsg.toLowerCase().includes('autopilot') || typedMsg.toLowerCase().includes('refactor');
-        
-        const assistantResult: ChatMessage = isAutopilotRequest ? {
-          id: `m-asst-${Date.now()}`,
-          role: 'assistant',
-          content: 'I have started Autopilot to address your caching request.',
-          timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }),
-          isAutopilotCard: true,
-          autopilotTitle: typedMsg,
-          autopilotStep: 'Step 1 of 4',
-          autopilotTotalSteps: 4,
-          autopilotStatus: 'running'
-        } : {
-          id: `m-asst-${Date.now()}`,
-          role: 'assistant',
-          content: `I have thoroughly updated components matching: "${typedMsg}". Standard local validations were resolved smoothly, ensuring clean runtime conditions.`,
-          timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }),
-          actions: [
-            { title: 'Edited app.tsx', sheetKey: 'edited-app' },
-            { title: 'Ran integration suite', sheetKey: 'ran-tests' }
-          ]
-        };
-
+    createChatStream(
+      apiMessages,
+      undefined,
+      (chunk) => {
+        responseContent += chunk;
+        setThinkingState('streaming');
+        setThreads(prev => {
+          const msgs = prev[currentSession] || [];
+          const existingIdx = msgs.findIndex(m => m.id === assistantId);
+          if (existingIdx >= 0) {
+            const updated = [...msgs];
+            updated[existingIdx] = { ...updated[existingIdx], content: responseContent };
+            return { ...prev, [currentSession]: updated };
+          }
+          return {
+            ...prev,
+            [currentSession]: [...msgs, {
+              id: assistantId,
+              role: 'assistant',
+              content: responseContent,
+              timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })
+            }]
+          };
+        });
+      },
+      (result) => {
+        setThinkingState('idle');
+        // Save session state via API
+        const finalMessages = [
+          ...existingMessages.map(m => ({ role: m.role, content: m.content })),
+          { role: 'user', content: typedMsg },
+          { role: 'assistant', content: result.content }
+        ];
+        if (currentSession) {
+          api.saveSession(currentSession, { messages: finalMessages }).catch(() => {});
+        }
+        triggerNotification("Response received completely.");
+      },
+      (error) => {
+        setThinkingState('idle');
         setThreads(prev => ({
           ...prev,
-          [currentSession]: [...(prev[currentSession] || []), assistantResult]
+          [currentSession]: [...(prev[currentSession] || []), {
+            id: `m-err-${Date.now()}`,
+            role: 'assistant',
+            content: `Error: ${error}`,
+            timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })
+          }]
         }));
-        setThinkingState('idle');
-        triggerNotification("Response received completely.");
-      }, 1500);
-
-    }, 2000);
+        triggerNotification(`Error: ${error}`);
+      }
+    );
   };
 
   const handleCreateNewChat = () => {
