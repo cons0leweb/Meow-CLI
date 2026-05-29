@@ -72,6 +72,11 @@ export default function App() {
   const [status, setStatus] = useState<any>(null);
   const [cost, setCost] = useState<any>(null);
   
+  // CWD / PWD state
+  const [currentCwd, setCurrentCwd] = useState<string>('');
+  const [editingCwd, setEditingCwd] = useState(false);
+  const [cwdInput, setCwdInput] = useState('');
+  
   // Abort controller for streaming
   const abortRef = useRef<AbortController | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
