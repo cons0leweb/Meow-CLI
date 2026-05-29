@@ -858,8 +858,6 @@ class Autopilot {
 
         if (msg.tool_calls && msg.tool_calls.length > 0) {
           await this._processToolCalls(msg);
-          // Check for user coordination messages after tool execution
-          this._injectCoordinationMessages();
           continue;
         }
 
