@@ -366,6 +366,13 @@ export function createChatStream(
           const data = JSON.parse(dataStr);
           if (data.type === 'content') {
             onChunk?.(data.content);
+          } else if (data.type === 'tool_call') {
+            onToolCall?.({
+              id: data.id,
+              name: data.name,
+              args: data.args || {},
+              toolType: data.toolType || 'generic'
+            });
           } else if (data.type === 'done') {
             onDone?.({ content: data.content || '', tool_calls: data.tool_calls || [], usage: data.usage });
           } else if (data.type === 'error') {
