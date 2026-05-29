@@ -26,6 +26,7 @@ export function Sidebar({
   onCreateNewChat,
   onDeleteSession,
   onNotify
+  cwd = '/home/cons0leweb/JS/meow-cli',
 }: SidebarProps) {
   return (
     <aside className="w-64 border-r border-[#141418]/60 bg-[#070709] flex flex-col shrink-0 min-h-0 select-none">
