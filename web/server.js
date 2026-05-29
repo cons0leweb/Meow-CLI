@@ -502,7 +502,7 @@ app.post('/api/chat', async (req, res) => {
   }
 });
 
-// ─── Streaming Chat (SSE) ──────────────────────────────────────────
+// ─── Streaming Chat (SSE) with Tool Execution Loop ─────────────────
 app.post('/api/chat/stream', async (req, res) => {
   try {
     const { messages, model } = req.body;
@@ -523,73 +523,137 @@ app.post('/api/chat/stream', async (req, res) => {
     res.setHeader('Connection', 'keep-alive');
     res.setHeader('X-Accel-Buffering', 'no');
 
-    if (!apiModule?.callApiStream) {
-      res.write(`data: ${JSON.stringify({ type: 'error', error: 'API stream module not loaded' })}\n\n`);
+    if (!apiModule?.callApiStream || !apiModule?.callApi) {
+      res.write(`data: ${JSON.stringify({ type: 'error', error: 'API module not fully loaded' })}\n\n`);
       res.end();
       return;
     }
 
+    const MAX_TOOL_ROUNDS = 10;
+    let fullContent = '';
+    let accumulatedUsage = null;
+    let allToolCalls = [];
+
     try {
-      let fullContent = '';
-      let toolCalls = [];
-      let usage = null;
+      for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+        const isFirst = round === 0;
+        let result;
 
-      await apiModule.callApiStream(messages, effectiveCfg, (chunk) => {
-        if (chunk.type === 'text' && chunk.content) {
-          fullContent += chunk.content;
-          res.write(`data: ${JSON.stringify({ type: 'content', content: chunk.content })}\n\n`);
-        }
-      }).then(result => {
-        if (result) {
-          const msg = result.choices?.[0]?.message;
-          if (msg) {
-            if (msg.content) fullContent = msg.content;
-            if (msg.tool_calls) toolCalls = msg.tool_calls;
-          }
-          if (result.usage) usage = result.usage;
-        }
-
-        if (toolCalls && toolCalls.length > 0) {
-          for (const tc of toolCalls) {
-            const name = tc.function?.name || tc.name || 'unknown';
-            let args = {};
-            try {
-              args = typeof tc.function?.arguments === 'string'
-                ? JSON.parse(tc.function.arguments)
-                : (tc.function?.arguments || tc.input || {});
-            } catch {
-              args = { raw: String(tc.function?.arguments || '') };
+        if (isFirst) {
+          // First round: stream
+          result = await apiModule.callApiStream(messages, effectiveCfg, (chunk) => {
+            if (chunk.type === 'text' && chunk.content) {
+              fullContent += chunk.content;
+              res.write(`data: ${JSON.stringify({ type: 'content', content: chunk.content })}\n\n`);
             }
+          });
+        } else {
+          // Subsequent rounds: non-streaming with tool results
+          result = await apiModule.callApi(messages, effectiveCfg);
+        }
 
-            const toolType = toolToActivityType(name);
+        if (!result) break;
 
-            res.write(`data: ${JSON.stringify({
-              type: 'tool_call',
-              id: tc.id || `tc-${Date.now()}`,
-              name,
-              args,
-              toolType
-            })}\n\n`);
+        const msg = result.choices?.[0]?.message;
+        if (!msg) break;
+
+        // Accumulate content from non-streaming rounds
+        if (!isFirst && msg.content) {
+          fullContent += '\n\n' + msg.content;
+          res.write(`data: ${JSON.stringify({ type: 'content', content: '\n\n' + msg.content })}\n\n`);
+        }
+
+        if (result.usage) {
+          accumulatedUsage = result.usage;
+          if (costTracker) costTracker.record(result.usage, effectiveModel);
+        }
+
+        const toolCalls = msg.tool_calls || [];
+        if (toolCalls.length === 0) {
+          // No more tool calls — done
+          if (msg.content) fullContent = msg.content;
+          break;
+        }
+
+        // Execute tools and push results
+        allToolCalls.push(...toolCalls);
+
+        for (const tc of toolCalls) {
+          const name = tc.function?.name || tc.name || 'unknown';
+          let args = {};
+          try {
+            const rawArgs = tc.function?.arguments;
+            args = typeof rawArgs === 'string' ? JSON.parse(rawArgs) : (rawArgs || tc.input || {});
+          } catch {
+            args = { raw: String(tc.function?.arguments || '') };
           }
+
+          // Notify frontend about the tool call
+          res.write(`data: ${JSON.stringify({
+            type: 'tool_call',
+            id: tc.id || `tc-${Date.now()}-${round}`,
+            name,
+            args,
+            toolType: toolToActivityType(name)
+          })}\n\n`);
+
+          // Execute the tool
+          let toolResult = '';
+          try {
+            if (toolsModule?.executeTool) {
+              toolResult = await toolsModule.executeTool(name, args, effectiveCfg);
+            } else {
+              toolResult = `Tool execution not available (${name})`;
+            }
+          } catch (toolErr) {
+            toolResult = `Error: ${toolErr.message}`;
+          }
+
+          // Truncate large results
+          if (toolResult && toolResult.length > 10000) {
+            toolResult = toolResult.slice(0, 10000) + '\n… [truncated]';
+          }
+
+          // Send tool result
+          res.write(`data: ${JSON.stringify({
+            type: 'tool_result',
+            id: tc.id || `tc-${Date.now()}-${round}`,
+            name,
+            result: toolResult
+          })}\n\n`);
+
+          // Push tool result into messages for next AI round
+          messages.push({
+            role: 'tool',
+            tool_call_id: tc.id,
+            content: toolResult || ''
+          });
         }
 
-        if (!fullContent && toolCalls && toolCalls.length > 0) {
-          fullContent = 'Выполняю задачу... использую инструменты для работы с файлами и системой.';
-          res.write(`data: ${JSON.stringify({ type: 'content', content: fullContent })}\n\n`);
-        }
+        // Push assistant message with tool calls
+        messages.push({
+          role: 'assistant',
+          content: msg.content || '',
+          tool_calls: toolCalls.map(tc => ({
+            id: tc.id,
+            type: 'function',
+            function: {
+              name: tc.function?.name || tc.name || '',
+              arguments: typeof tc.function?.arguments === 'string'
+                ? tc.function.arguments
+                : JSON.stringify(tc.function?.arguments || {})
+            }
+          }))
+        });
+      }
 
-        if (costTracker && usage) {
-          costTracker.record(usage, effectiveModel);
-        }
-
-        res.write(`data: ${JSON.stringify({
-          type: 'done',
-          content: fullContent,
-          tool_calls: toolCalls,
-          usage
-        })}\n\n`);
-        res.end();
-      });
+      res.write(`data: ${JSON.stringify({
+        type: 'done',
+        content: fullContent,
+        tool_calls: allToolCalls,
+        usage: accumulatedUsage
+      })}\n\n`);
+      res.end();
     } catch (apiErr) {
       res.write(`data: ${JSON.stringify({ type: 'error', error: apiErr.message })}\n\n`);
       res.end();
