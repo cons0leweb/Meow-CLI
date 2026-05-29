@@ -888,7 +888,11 @@ app.post('/api/sessions/:id/save', (req, res) => {
       return res.status(404).json({ error: 'No session manager' });
     }
     
+    // Load first to set sessionManager.sessionId = id
     const data = sessionManager.load(id) || {};
+    // Ensure sessionManager.sessionId matches the requested session
+    sessionManager.sessionId = id;
+    
     const saveData = {
       ...data,
       model: model || data.model || '',
@@ -897,11 +901,7 @@ app.post('/api/sessions/:id/save', (req, res) => {
       messagesCount: (messages || data.messages || []).length,
     };
     
-    // Use internal save method
-    if (typeof sessionManager.save === 'function') {
-      sessionManager.save(saveData);
-    }
-    
+    sessionManager.save(saveData);
     res.json({ success: true, message: 'Session saved' });
   } catch (e) {
     res.status(500).json({ error: e.message });
