@@ -781,10 +781,6 @@ class Autopilot {
     this._printHeader(task);
     this._log("start", task);
 
-    // Start coordination channel so user can send messages during autopilot
-    this._channel = new CoordinationChannel();
-    this._channel.start();
-
     let finalReason = `${SUCCESS}✓ Completed${C.reset}`;
     let apiRetries = 0;
     const maxApiRetries = 3;
