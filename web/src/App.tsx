@@ -492,6 +492,36 @@ export default function App() {
               <span className="text-[10px] font-mono text-zinc-500">{status.activeModel}</span>
             </>
           )}
+          {/* CWD display */}
+          <span className="h-3 w-[1px] bg-zinc-800" />
+          <div className="flex items-center gap-1.5">
+            <FolderOpen className="w-3 h-3 text-zinc-500" />
+            {editingCwd ? (
+              <form 
+                onSubmit={e => { e.preventDefault(); handleCwdChange(); }}
+                className="flex items-center gap-1"
+              >
+                <input
+                  type="text"
+                  value={cwdInput}
+                  onChange={e => setCwdInput(e.target.value)}
+                  className="bg-zinc-900 border border-zinc-800 rounded px-1.5 py-0.5 text-[10px] text-zinc-300 font-mono w-48 focus:outline-none focus:border-zinc-600"
+                  autoFocus
+                  onBlur={() => setEditingCwd(false)}
+                  onKeyDown={e => e.key === 'Escape' && setEditingCwd(false)}
+                />
+                <button type="submit" className="text-[10px] text-amber-500 font-medium">Go</button>
+              </form>
+            ) : (
+              <span 
+                onClick={() => { setCwdInput(currentCwd); setEditingCwd(true); }}
+                className="text-[10px] font-mono text-zinc-500 hover:text-zinc-300 cursor-pointer truncate max-w-[200px]"
+                title={currentCwd}
+              >
+                {currentCwd.slice(-40) || '~'}
+              </span>
+            )}
+          </div>
         </div>
 
          {/* Dynamic Context Buttons -> Trigger Right Sheet system */}
