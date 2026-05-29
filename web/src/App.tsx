@@ -694,221 +694,24 @@ export default function App() {
         {/* CENTRAL CHAT CONTAINER */}
         <section className="flex-1 flex flex-col bg-[#070709] min-w-0 relative">
           
-          {/* Scrollable message deck */}
-          <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-6">
-            <div className="max-w-2xl mx-auto space-y-6">
+          {/* VirtualChatList with Markdown rendering */}
+          <VirtualChatList
+            messages={currentMessages}
+            streamingContent={streamingContent}
+            thinkingState={thinkingState}
+            autopilotPaused={autopilotPaused}
+            onAutopilotTogglePause={(paused) => {
+              setAutopilotPaused(paused);
+              triggerNotification(paused ? "Autopilot sequence paused." : "Autopilot sequence resumed.");
+            }}
+            onAutopilotTogglePlan={(id) => setPlanExpandedId(id)}
+            expandedPlanId={planExpandedId}
+            themeColors={themeColors}
+            config={config}
+            messagesEndRef={messagesEndRef}
+          />
 
-              {/* Threads rendered with premium motion choreography */}
-              {currentMessages.map((msg) => {
-                const isUser = msg.role === 'user';
-                
-                // If it is regular chat bubble
-                if (!msg.isAutopilotCard) {
-                  return (
-                    <motion.div 
-                      key={msg.id} 
-                      initial={
-                        isUser 
-                          ? { opacity: 0, y: 12 } 
-                          : { opacity: 0, y: 8, filter: 'blur(6px)' }
-                      }
-                      animate={{ 
-                        opacity: 1, 
-                        y: 0, 
-                        filter: 'blur(0px)'
-                      }}
-                      transition={{ 
-                        duration: 0.55, 
-                        ease: [0.16, 1, 0.3, 1]
-                      }}
-                      className="group/bubble flex gap-4 justify-start"
-                    >
-                      
-                      {/* Avatar */}
-                      {!isUser && (
-                        <div className="w-8 h-8 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center shrink-0">
-                          <Sparkles className="w-4 h-4 text-amber-500" />
-                        </div>
-                      )}
-
-                      {/* Content block */}
-                      <div className={`flex-1 min-w-0 ${isUser ? 'pl-12' : 'pr-12'}`}>
-                        <div className={`rounded-xl p-4 text-xs leading-relaxed border ${
-                          isUser 
-                            ? 'bg-[#111115] border-zinc-800 text-white shadow-soft ml-auto max-w-lg' 
-                            : 'bg-transparent border-transparent text-zinc-200'
-                        }`}>
-                          
-                          {/* Bubble Metadata */}
-                          <div className="flex items-center gap-2 mb-2">
-                            <span className="font-semibold text-xs text-white">
-                              {isUser ? 'You' : 'Agent'}
-                            </span>
-                            <span className="text-[10px] text-zinc-500 font-mono">
-                              {msg.timestamp}
-                            </span>
-                          </div>
-
-                          <div className="font-sans whitespace-pre-wrap selection:bg-zinc-850">
-                            {msg.content}
-                          </div>
-                        </div>
-                      </div>
-
-                    </motion.div>
-                  );
-                }
-
-                // Autopilot Card
-                return (
-                  <motion.div 
-                    key={msg.id} 
-                    initial={{ opacity: 0, y: 12, scale: 0.97 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    transition={{ type: 'spring', damping: 28, stiffness: 220 }}
-                    className="flex gap-4 justify-start"
-                  >
-                    
-                    <div className="w-8 h-8 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center shrink-0">
-                      <Cpu className="w-4 h-4 text-[#ff7043]" />
-                    </div>
-
-                    <div className="flex-1 max-w-md bg-[#0d0d11] border border-zinc-850 rounded-xl p-4 shadow-soft">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="space-y-1">
-                          <span className="text-[9px] uppercase tracking-widest font-mono text-zinc-500 font-semibold flex items-center gap-1.5">
-                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-                            <span>Autopilot executing</span>
-                          </span>
-                          <h4 className="text-xs font-semibold text-white">{msg.autopilotTitle}</h4>
-                          <span className="text-[10px] text-zinc-400 font-mono">
-                            {msg.autopilotStep} (Status: {autopilotPaused ? 'Paused' : 'Running'})
-                          </span>
-                        </div>
-
-                        {/* Tiny pause button */}
-                        <button 
-                          onClick={() => {
-                            setAutopilotPaused(!autopilotPaused);
-                            triggerNotification(autopilotPaused ? "Autopilot sequence resumed." : "Autopilot sequence paused.");
-                          }}
-                          className="px-2 py-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-805 text-zinc-300 font-medium text-[10px] rounded transition cursor-pointer flex items-center gap-1"
-                        >
-                          {autopilotPaused ? <Play className="w-2.5 h-2.5 text-emerald-500" /> : <Pause className="w-2.5 h-2.5" />}
-                          <span>{autopilotPaused ? 'Resume' : 'Pause'}</span>
-                        </button>
-                      </div>
-
-                      {/* Toggle Checklist */}
-                      <div className="mt-3.5 pt-3 border-t border-zinc-900">
-                        <button 
-                          onClick={() => setPlanExpandedId(planExpandedId === msg.id ? null : msg.id)}
-                          className="text-[11px] font-semibold text-zinc-500 hover:text-zinc-300 transition flex items-center gap-1 cursor-pointer"
-                        >
-                          <span>View Plan</span>
-                          <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-300 ${planExpandedId === msg.id ? 'rotate-180' : ''}`} />
-                        </button>
-
-                        <AnimatePresence>
-                          {planExpandedId === msg.id && (
-                            <motion.div 
-                              initial={{ height: 0, opacity: 0 }}
-                              animate={{ height: 'auto', opacity: 1, marginTop: 8 }}
-                              exit={{ height: 0, opacity: 0 }}
-                              transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
-                              className="overflow-hidden space-y-1.5"
-                            >
-                              {[
-                                { label: 'Analyze requirements', status: 'completed' },
-                                { label: 'Implement changes', status: 'pending' },
-                                { label: 'Run validation', status: 'pending' },
-                                { label: 'Verify results', status: 'pending' },
-                              ].map((step, idx) => (
-                                <motion.div 
-                                  key={idx}
-                                  initial={{ opacity: 0, x: -6 }}
-                                  animate={{ opacity: 1, x: 0 }}
-                                  transition={{ delay: idx * 0.04, duration: 0.35 }}
-                                  className="flex items-center gap-2 text-xs py-0.5 pl-1 text-zinc-400"
-                                >
-                                  {step.status === 'completed' ? (
-                                    <Check className="w-3.5 h-3.5 text-emerald-500" />
-                                  ) : (
-                                    <div className="w-3.5 h-3.5 rounded-full border border-zinc-700 shrink-0" />
-                                  )}
-                                  <span className={step.status === 'completed' ? 'line-through text-zinc-650 font-normal' : 'text-zinc-300 font-medium'}>
-                                    {step.label}
-                                  </span>
-                                </motion.div>
-                              ))}
-                            </motion.div>
-                          )}
-                        </AnimatePresence>
-                      </div>
-                    </div>
-
-                  </motion.div>
-                );
-              })}
-
-              {/* Streaming content bubble */}
-              <AnimatePresence>
-                {streamingContent && (
-                  <motion.div 
-                    initial={{ opacity: 0, y: 8, filter: 'blur(6px)' }}
-                    animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-                    transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
-                    className="flex gap-4 justify-start"
-                  >
-                    <div className="w-8 h-8 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center shrink-0">
-                      <Sparkles className="w-4 h-4 text-amber-500" />
-                    </div>
-                    <div className="flex-1 min-w-0 pr-12">
-                      <div className="rounded-xl p-4 text-xs leading-relaxed border bg-transparent border-transparent text-zinc-200">
-                        <div className="flex items-center gap-2 mb-2">
-                          <span className="font-semibold text-xs text-white">Agent</span>
-                          <span className="text-[10px] text-zinc-500 font-mono">streaming...</span>
-                        </div>
-                        <div className="font-sans whitespace-pre-wrap selection:bg-zinc-850">
-                          {streamingContent}
-                          <span className="inline-block w-1.5 h-4 bg-amber-500/60 ml-0.5 animate-pulse rounded-sm" />
-                        </div>
-                      </div>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
-              {/* CLAUDE SHIMMER THINKING BUBBLE */}
-              <AnimatePresence>
-                {thinkingState === 'thinking' && !streamingContent && (
-                  <motion.div 
-                    initial={{ opacity: 0, y: 12, filter: 'blur(4px)' }}
-                    animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-                    exit={{ opacity: 0, y: -4, filter: 'blur(4px)' }}
-                    transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
-                    className="flex gap-4 justify-start"
-                  >
-                    <div className="w-8 h-8 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center shrink-0">
-                      <Sparkles className="w-4 h-4 text-zinc-500" />
-                    </div>
-                    
-                    <div className="flex-1 max-w-md bg-[#0d0d11]/40 border border-zinc-900 rounded-xl p-4 space-y-2">
-                      <div className="text-xs font-semibold text-zinc-400">
-                        <span className="text-shimmer">Thinking...</span>
-                      </div>
-                      <div className="h-2 bg-zinc-900 rounded w-11/12 animate-pulse" />
-                      <div className="h-2 bg-zinc-900 rounded w-8/12 animate-pulse" />
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
-              <div ref={messagesEndRef} />
-            </div>
-          </div>
-
-          {/* COMPOSER FIELD AT BOTTOM */}
+          {/* COMPOSER FIELD AT BOTTOM */}          {/* COMPOSER FIELD AT BOTTOM */}
           <div className="p-6 border-t border-[#141418]/60 bg-[#070709] shrink-0">
             <div className="max-w-2xl mx-auto w-full">
               <form 
