@@ -365,109 +365,81 @@ export default function App() {
                 <span className="text-[10px] font-mono text-zinc-500 bg-zinc-950 px-1 py-0.5 border border-zinc-900 rounded select-none">⌘N</span>
               </motion.button>
 
-              {/* Recent Chats */}
+              {/* Recent Chats from API */}
               <div className="space-y-1">
                 <div className="text-[9px] uppercase font-bold tracking-widest text-zinc-500 mb-2 px-1">
                   Recent Chats
                 </div>
                 
-                <motion.button 
-                  whileHover={{ x: 2 }}
-                  onClick={() => {
-                    setCurrentSession('crud-create');
-                    triggerNotification("Switched to Users CRUD context.");
-                  }}
-                  className={`w-full text-left px-3 py-2 rounded-xl flex items-center justify-between transition text-xs cursor-pointer ${
-                    currentSession === 'crud-create' 
-                      ? 'bg-[#111115] text-white font-medium border border-zinc-800/40' 
-                      : 'text-zinc-400 hover:bg-zinc-900/20 hover:text-zinc-200'
-                  }`}
-                >
-                  <div className="flex items-center gap-2 truncate">
-                    <MessageSquare className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-                    <span className="truncate">Create CRUD for users</span>
-                  </div>
-                </motion.button>
-
-                <motion.button 
-                  whileHover={{ x: 2 }}
-                  onClick={() => {
-                    setCurrentSession('auth-debug');
-                    triggerNotification("Switched to Cache Lock debug sequence.");
-                  }}
-                  className={`w-full text-left px-3 py-2 rounded-xl flex items-center justify-between transition text-xs cursor-pointer ${
-                    currentSession === 'auth-debug' 
-                      ? 'bg-[#111115] text-white font-medium border border-zinc-800/40' 
-                      : 'text-zinc-400 hover:bg-zinc-900/20 hover:text-zinc-200'
-                  }`}
-                >
-                  <div className="flex items-center gap-2 truncate">
-                    <MessageSquare className="w-3.5 h-3.5 text-cyan-500 shrink-0" />
-                    <span className="truncate">Identify cache locks</span>
-                  </div>
-                </motion.button>
-
-                <motion.button 
-                  whileHover={{ x: 2 }}
-                  onClick={() => {
-                    setCurrentSession('auth-refactor');
-                    triggerNotification("Switched to Auth Middleware refactoring stream.");
-                  }}
-                  className={`w-full text-left px-3 py-2 rounded-xl flex items-center justify-between transition text-xs cursor-pointer ${
-                    currentSession === 'auth-refactor' 
-                      ? 'bg-[#111115] text-white font-medium border border-zinc-800/40' 
-                      : 'text-zinc-400 hover:bg-zinc-900/20 hover:text-zinc-200'
-                  }`}
-                >
-                  <div className="flex items-center gap-2 truncate">
-                    <MessageSquare className="w-3.5 h-3.5 text-emerald-505 shrink-0" />
-                    <span className="truncate">Refactor auth middleware</span>
-                  </div>
-                </motion.button>
+                {loading ? (
+                  <div className="text-xs text-zinc-500 px-3 py-2">Loading sessions...</div>
+                ) : sessions.length === 0 ? (
+                  <div className="text-xs text-zinc-500 px-3 py-2">No sessions yet</div>
+                ) : (
+                  sessions.slice(0, 10).map((session) => (
+                    <motion.button 
+                      key={session.id}
+                      whileHover={{ x: 2 }}
+                      onClick={async () => {
+                        setCurrentSession(session.id);
+                        // Load messages for this session if not cached
+                        if (!threads[session.id]) {
+                          try {
+                            const sessionData = await api.loadSession(session.id);
+                            setThreads(prev => ({
+                              ...prev,
+                              [session.id]: (sessionData.messages || []).map((m: any, i: number) => ({
+                                id: `msg-${session.id}-${i}`,
+                                role: m.role || 'user',
+                                content: m.content || '',
+                                timestamp: m.time ? new Date(m.time).toLocaleTimeString() : '',
+                              }))
+                            }));
+                          } catch {}
+                        }
+                        triggerNotification(`Switched to ${session.chat || session.id} context.`);
+                      }}
+                      className={`w-full text-left px-3 py-2 rounded-xl flex items-center justify-between transition text-xs cursor-pointer ${
+                        currentSession === session.id 
+                          ? 'bg-[#111115] text-white font-medium border border-zinc-800/40' 
+                          : 'text-zinc-400 hover:bg-zinc-900/20 hover:text-zinc-200'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 truncate">
+                        <MessageSquare className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                        <span className="truncate">{session.chat || session.id}</span>
+                      </div>
+                    </motion.button>
+                  ))
+                )}
               </div>
 
-              {/* Projects */}
+              {/* Status info from API */}
               <div className="space-y-1">
                 <div className="text-[9px] uppercase font-bold tracking-widest text-[#4f4f5a] mb-2 px-1">
-                  Projects
+                  System Status
                 </div>
                 <div className="space-y-0.5">
                   <motion.div 
                     whileHover={{ x: 2 }}
-                    className="text-zinc-400 hover:text-zinc-200 text-xs px-3 py-1.5 rounded-lg flex items-center gap-2.5 cursor-pointer transition"
+                    className="text-zinc-400 text-xs px-3 py-1.5 rounded-lg flex items-center gap-2.5"
                   >
-                    <span className="w-1.5 h-1.5 rounded-full bg-zinc-650" />
-                    <span>Core Daemon</span>
+                    <span className={`w-1.5 h-1.5 rounded-full ${statusInfo?.apiKeyConfigured ? 'bg-emerald-500' : 'bg-zinc-600'}`} />
+                    <span>API Key: {statusInfo?.apiKeyConfigured ? 'Configured' : 'Not set'}</span>
                   </motion.div>
                   <motion.div 
                     whileHover={{ x: 2 }}
-                    className="text-zinc-400 hover:text-zinc-200 text-xs px-3 py-1.5 rounded-lg flex items-center gap-2.5 cursor-pointer transition"
+                    className="text-zinc-400 text-xs px-3 py-1.5 rounded-lg flex items-center gap-2.5"
                   >
-                    <span className="w-1.5 h-1.5 rounded-full bg-zinc-650" />
-                    <span>Mobile Interface</span>
-                  </motion.div>
-                </div>
-              </div>
-
-              {/* Assistants */}
-              <div className="space-y-1">
-                <div className="text-[9px] uppercase font-bold tracking-widest text-[#4f4f5a] mb-2 px-1">
-                  Assistants
-                </div>
-                <div className="space-y-0.5">
-                  <motion.div 
-                    whileHover={{ x: 2 }}
-                    className="text-zinc-400 hover:text-zinc-200 text-xs px-3 py-1.5 rounded-lg flex items-center gap-2.5 cursor-pointer transition"
-                  >
-                    <span className="text-sm">🤖</span>
-                    <span>Autopilot Architect</span>
+                    <span className="w-1.5 h-1.5 rounded-full bg-zinc-600" />
+                    <span>Model: {statusInfo?.activeModel || 'N/A'}</span>
                   </motion.div>
                   <motion.div 
                     whileHover={{ x: 2 }}
-                    className="text-zinc-400 hover:text-zinc-200 text-xs px-3 py-1.5 rounded-lg flex items-center gap-2.5 cursor-pointer transition"
+                    className="text-zinc-400 text-xs px-3 py-1.5 rounded-lg flex items-center gap-2.5"
                   >
-                    <span className="text-sm">⚙</span>
-                    <span>Spec Validator</span>
+                    <span className="w-1.5 h-1.5 rounded-full bg-zinc-600" />
+                    <span>Profile: {statusInfo?.activeProfile || 'default'}</span>
                   </motion.div>
                 </div>
               </div>
