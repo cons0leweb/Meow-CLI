@@ -68,6 +68,61 @@ export default function App() {
   // Active threads state dictionary
   const [threads, setThreads] = useState<Record<string, ChatMessage[]>>({});
 
+  // ─── Tool Activity Timeline State ──────────────────────────────────
+  const [toolActivityItems, setToolActivityItems] = useState<ActivityItem[]>([]);
+  const [currentActivityMsgId, setCurrentActivityMsgId] = useState<string | null>(null);
+
+  // Map tool call to beautiful ActivityTimeline item
+  function toolCallToActivityItem(tc: ToolCallEvent, status: ActivityStatus = 'running'): ActivityItem {
+    const toolLabels: Record<string, { type: ActivityItem['type']; label: string }> = {
+      'read_file':    { type: 'read',    label: 'Reading File' },
+      'list_dir':     { type: 'read',    label: 'Listing Directory' },
+      'grep_search':  { type: 'read',    label: 'Searching Code' },
+      'write_file':   { type: 'edit',    label: 'Writing File' },
+      'patch_file':   { type: 'edit',    label: 'Editing File' },
+      'run_shell':    { type: 'build',   label: 'Running Shell Command' },
+      'tool_chain':   { type: 'build',   label: 'Executing Tool Chain' },
+      'http_request': { type: 'generic', label: 'Making HTTP Request' },
+      'web_search':   { type: 'generic', label: 'Searching Web' },
+      'delegate_task':{ type: 'thought', label: 'Delegating Subtask' },
+      'ask_user':     { type: 'review',  label: 'Asking for Input' },
+      'confirm':      { type: 'review',  label: 'Awaiting Confirmation' },
+      'choose':       { type: 'review',  label: 'Presenting Options' },
+      'git_diff':     { type: 'review',  label: 'Reviewing Changes' },
+      'git_log':      { type: 'read',    label: 'Checking History' },
+      'git_commit':   { type: 'edit',    label: 'Committing Changes' },
+      'git_branch':   { type: 'edit',    label: 'Managing Branches' },
+      'ci_pipeline':  { type: 'test',    label: 'Running CI Pipeline' },
+    };
+
+    const config = toolLabels[tc.name] || { type: 'generic' as const, label: tc.name || 'Executing Tool' };
+    
+    // Format args as detail string
+    let detail = '';
+    if (tc.args) {
+      if (tc.args.path) detail = `📄 ${tc.args.path}`;
+      else if (tc.args.cmd) detail = `💻 ${tc.args.cmd.substring(0, 80)}${tc.args.cmd.length > 80 ? '...' : ''}`;
+      else if (tc.args.query) detail = `🔍 ${tc.args.query.substring(0, 80)}`;
+      else if (tc.args.pattern) detail = `🔍 ${tc.args.pattern}`;
+      else if (tc.args.url) detail = `🔗 ${tc.args.url}`;
+      else if (tc.args.file) detail = `📄 ${tc.args.file}`;
+      else if (tc.args.message) detail = `📝 ${tc.args.message.substring(0, 60)}`;
+      else {
+        const keys = Object.keys(tc.args).slice(0, 3);
+        if (keys.length > 0) detail = keys.join(', ');
+      }
+    }
+
+    return {
+      id: tc.id || `tc-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      type: config.type,
+      label: config.label,
+      detail,
+      status,
+      timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }),
+    };
+  }
+
   // Fetch initial data from API
   useEffect(() => {
     async function loadData() {
