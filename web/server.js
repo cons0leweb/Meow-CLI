@@ -36,6 +36,8 @@ try {
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+console.log('DEBUG: Express app created, starting middleware setup...');
+
 // ─── Middleware ──────────────────────────────────────────────────────
 app.use(cors({ origin: ['http://localhost:3000', 'http://localhost:5173', 'http://127.0.0.1:3000', 'http://localhost:3001'], credentials: true }));
 app.use(express.json({ limit: '10mb' }));
