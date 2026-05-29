@@ -865,61 +865,71 @@ export default function App() {
                     </div>
                   )}
 
-                  {/* 3b. GLOBAL SYSTEM CONTEXT SHEETS */}
+                  {/* 3b. GLOBAL SYSTEM CONTEXT SHEETS - from API */}
                   {activeSheet === 'context' && (
                     <div className="space-y-6">
 
-                      {/* System Prompt */}
+                      {/* System Status */}
                       <div className="space-y-2">
-                        <div className="text-[10px] font-mono uppercase tracking-widest text-[#ff7043] font-bold">System Prompt Parameters</div>
+                        <div className="text-[10px] font-mono uppercase tracking-widest text-[#ff7043] font-bold">System Status</div>
                         <div className="p-3.5 bg-zinc-950 border border-zinc-900 rounded-xl font-mono text-[10px] text-zinc-400 leading-relaxed max-h-40 overflow-y-auto">
-                          "You are Meow Autonomous Core, a senior systems engineer. Minimize visual noise. Adhere to strict clean TypeScript limits. Eliminate telemetry clutter from outer rails."
+                          {statusInfo ? (
+                            <>
+                              <div>API Key: {statusInfo.apiKeyConfigured ? '✅ Configured' : '❌ Not set'}</div>
+                              <div>Model: {statusInfo.activeModel || 'N/A'}</div>
+                              <div>Profile: {statusInfo.activeProfile || 'N/A'}</div>
+                              <div>Provider: {statusInfo.activeProvider || 'N/A'}</div>
+                              <div>Theme: {statusInfo.theme || 'N/A'}</div>
+                              <div>Lang: {statusInfo.lang || 'N/A'}</div>
+                              <div>Sessions: {statusInfo.sessionsCount || 0}</div>
+                              <div>Autopilot: {autopilotState?.running ? 'Running' : 'Idle'}</div>
+                            </>
+                          ) : (
+                            'No status data available'
+                          )}
                         </div>
                       </div>
 
-                      {/* Active Workspace Files */}
+                      {/* Context Data from API */}
                       <div className="space-y-2">
-                        <div className="text-[10px] font-mono uppercase tracking-widest text-zinc-500 font-bold">Workspace Repository Layer</div>
+                        <div className="text-[10px] font-mono uppercase tracking-widest text-zinc-500 font-bold">Context Data</div>
                         
                         <div className="space-y-1">
-                          {[
-                            'src/core/users.ts',
-                            'src/core/autopilot.ts',
-                            'src/core/locks.ts',
-                            'src/App.tsx',
-                            'package.json'
-                          ].map((fpath, idx) => (
+                          {contextData.length > 0 ? contextData.map((ctx: any, idx: number) => (
                             <div key={idx} className="flex items-center justify-between p-2 rounded-lg bg-zinc-950/40 text-xs border border-transparent hover:border-zinc-900 hover:bg-zinc-900/30 transition">
-                              <span className="font-mono text-zinc-300">{fpath}</span>
-                              <FileText className="w-3.5 h-3.5 text-zinc-650" />
+                              <span className="font-mono text-zinc-300 truncate">{ctx.path || ctx.file || ctx.name || `item-${idx}`}</span>
+                              <FileText className="w-3.5 h-3.5 text-zinc-650 shrink-0" />
                             </div>
-                          ))}
+                          )) : (
+                            <div className="p-3 bg-zinc-950 border border-zinc-900 rounded-xl text-xs text-zinc-500">
+                              No context data available
+                            </div>
+                          )}
                         </div>
                       </div>
 
-                      {/* Learned Retained Memory */}
-                      <div className="space-y-2">
-                        <div className="text-[10px] font-mono uppercase tracking-widest text-zinc-500 font-bold">Autonomous Memory Rules</div>
-                        
-                        {[
-                          'Avoid standard blocking loops synchronously to preserve CPU performance.',
-                          'Use concurrent mutex locks when writing logging variables to the file structure.',
-                          'Favor functional React hooks and motion layout transformations.'
-                        ].map((rule, idx) => (
-                          <div key={idx} className="p-3 bg-zinc-950 border border-zinc-900 rounded-xl text-xs text-zinc-400">
-                            {rule}
+                      {/* Autopilot State */}
+                      {autopilotState && (
+                        <div className="space-y-2">
+                          <div className="text-[10px] font-mono uppercase tracking-widest text-zinc-500 font-bold">Autopilot State</div>
+                          <div className="p-3 bg-zinc-950 border border-zinc-900 rounded-xl text-xs text-zinc-400">
+                            <div>Status: {autopilotState.running ? 'Running' : 'Idle'}</div>
+                            <div>Phase: {autopilotState.phase || 'N/A'}</div>
+                            <div>Iterations: {autopilotState.iterations}</div>
                           </div>
-                        ))}
-                      </div>
+                        </div>
+                      )}
 
-                      {/* Active Tools list */}
+                      {/* Sessions Overview */}
                       <div className="space-y-2">
-                        <div className="text-[10px] font-mono uppercase tracking-widest text-zinc-500 font-bold">Authorized Integrations</div>
-                        <div className="grid grid-cols-2 gap-2 text-xs">
-                          <div className="p-2.5 bg-zinc-950 border border-zinc-900 rounded-lg text-zinc-455">view_file</div>
-                          <div className="p-2.5 bg-zinc-950 border border-zinc-900 rounded-lg text-zinc-455">patch_file</div>
-                          <div className="p-2.5 bg-zinc-950 border border-zinc-900 rounded-lg text-zinc-455">run_shell</div>
-                          <div className="p-2.5 bg-zinc-950 border border-zinc-900 rounded-lg text-zinc-445">grep</div>
+                        <div className="text-[10px] font-mono uppercase tracking-widest text-zinc-500 font-bold">Sessions ({sessions.length})</div>
+                        <div className="space-y-1">
+                          {sessions.slice(0, 10).map((s) => (
+                            <div key={s.id} className="p-2 bg-zinc-950 border border-zinc-900 rounded-lg text-xs text-zinc-400">
+                              <div className="font-mono text-zinc-300 truncate">{s.id}</div>
+                              <div className="text-[10px] text-zinc-600">{s.model} · {s.profile} · {s.messagesCount} msgs</div>
+                            </div>
+                          ))}
                         </div>
                       </div>
 
