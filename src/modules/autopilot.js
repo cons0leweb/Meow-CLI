@@ -672,35 +672,6 @@ class Autopilot {
   }
 
   /** @private */
-  _injectCoordinationMessages() {
-    if (!this._channel || !this._channel.hasMessages()) return 0;
-
-    const coordMessages = this._channel.drain();
-    let injectedCount = 0;
-
-    for (let i = 0; i < coordMessages.length; i++) {
-      const msg = coordMessages[i];
-      const seqNum = this._channel.totalReceived - coordMessages.length + i + 1;
-      const formatted = formatCoordinationMessage(msg, seqNum);
-
-      this.messages.push({ role: "user", content: formatted });
-      this._log("coordination", `#${seqNum}: ${msg.slice(0, 200)}`);
-      injectedCount++;
-
-      // Clear the nudge counter since user just interacted
-      this.nudgeCount = 0;
-    }
-
-    if (injectedCount > 0) {
-      console.log(
-        `  ${INFO("┃")} ${ACCENT.bold(`💬 ${injectedCount} coordination message${injectedCount > 1 ? "s" : ""} injected`)}`
-      );
-    }
-
-    return injectedCount;
-  }
-
-  /** @private */
   async _processToolCalls(msg) {
     const calls = msg.tool_calls;
     this.toolCalls += calls.length;
