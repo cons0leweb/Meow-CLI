@@ -741,7 +741,7 @@ export default function App() {
                   rows={2}
                   value={composerVal}
                   onChange={(e) => setComposerVal(e.target.value)}
-                  placeholder={currentSession === 'auth-refactor' ? 'Send guidance to the agent...' : 'How should Meow adjust the codebase?'}
+                  placeholder="How should Meow adjust the codebase?"
                   className="w-full bg-transparent border-0 text-xs text-white placeholder-zinc-500 focus:ring-0 focus:outline-none resize-none px-2 py-1 leading-relaxed"
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
