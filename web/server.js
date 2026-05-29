@@ -674,7 +674,8 @@ app.post('/api/auth/logout', (req, res) => {
 // ─── Serve Static Files (Vite build output) ─────────────────────────
 const distPath = path.join(__dirname, 'dist');
 if (fs.existsSync(distPath)) {
-  app.use(express.static(distPath));
+  app.use('/assets', express.static(path.join(distPath, 'assets')));
+  app.use('/src', express.static(distPath));
   // SPA fallback (catch-all for non-API routes)
   app.use((req, res, next) => {
     if (req.path.startsWith('/api/')) return next();
