@@ -5,7 +5,8 @@ import {
   MessageSquare, Plus, Settings, Eye, FileText, Terminal, ArrowUpRight, Code, Shield, RotateCcw
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { api, createChatStream, type SessionMeta, type StatusResponse } from './lib/api';
+import { api, createChatStream, type SessionMeta, type StatusResponse, type ToolCallEvent } from './lib/api';
+import { ActivityTimeline, type ActivityItem, type ActivityStatus } from './components/ActivityTimeline';
 
 // ============================================================================
 // TYPE DECLARATIONS
