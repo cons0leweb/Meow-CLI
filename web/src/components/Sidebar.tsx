@@ -25,7 +25,7 @@ export function Sidebar({
   onToggleSheet,
   onCreateNewChat,
   onDeleteSession,
-  onNotify
+  onNotify,
   cwd = '/home/cons0leweb/JS/meow-cli',
 }: SidebarProps) {
   return (
