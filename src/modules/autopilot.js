@@ -796,17 +796,9 @@ class Autopilot {
         this._manageContext();
 
         let data;
-        // Skip the raw-stdout Spinner when coordination channel is active
-        // (Ink manages the terminal, raw writes would conflict)
-        const useSpinner = !this._channel;
-        const spinner = useSpinner
-          ? new Spinner(`${this.currentPhase} (iter ${this.iteration})`)
-          : null;
-        if (!useSpinner) {
-          console.log(`  ${ACCENT("⟳")} ${TEXT_DIM(`${this.currentPhase} (iter ${this.iteration})`)}`);
-        }
+        const spinner = new Spinner(`${this.currentPhase} (iter ${this.iteration})`);
         try {
-          if (spinner) spinner.start();
+          spinner.start();
           data = await callApi(this.messages, this.cfg);
           if (spinner) spinner.stop();
           apiRetries = 0;
