@@ -34,14 +34,21 @@ export interface ChatMessage {
 // MAIN APPLICATION CORE
 // ============================================================================
 export default function App() {
+  // API data states
+  const [sessions, setSessions] = useState<SessionMeta[]>([]);
+  const [statusInfo, setStatusInfo] = useState<StatusResponse | null>(null);
+  const [contextData, setContextData] = useState<any[]>([]);
+  const [autopilotState, setAutopilotState] = useState<{ running: boolean; phase: string; iterations: number } | null>(null);
+  const [loading, setLoading] = useState(true);
+
   // Current session & interactive state
-  const [currentSession, setCurrentSession] = useState<string>('crud-create');
+  const [currentSession, setCurrentSession] = useState<string>('');
   
   // Right sheet system keys: 'changes', 'context', 'action-detail', null
   const [activeSheet, setActiveSheet] = useState<'changes' | 'context' | 'action-detail' | null>(null);
   const [selectedActionDetail, setSelectedActionDetail] = useState<ActionDetail | null>(null);
 
-  // Simulated global states
+  // Composer state
   const [composerVal, setComposerVal] = useState<string>('');
   const [thinkingState, setThinkingState] = useState<'idle' | 'thinking' | 'streaming'>('idle');
   const [showNotification, setShowNotification] = useState<string | null>(null);
@@ -57,119 +64,79 @@ export default function App() {
   // Autoapprove state
   const [autoApproveActive, setAutoApproveActive] = useState<boolean>(false);
 
-  // Active threads state dictionary for the three core scenes
-  const [threads, setThreads] = useState<Record<string, ChatMessage[]>>({
-    'crud-create': [
-      {
-        id: 'c1',
-        role: 'user',
-        content: 'Create CRUD for users',
-        timestamp: '19:40:02'
-      },
-      {
-        id: 'c2',
-        role: 'assistant',
-        content: `I'll create a CRUD implementation for users. I am going to inspect existing schemas in the schema directory, patch the active user.ts entity, and execute a local database migration test suite to verify consistency limits.`,
-        timestamp: '19:40:05',
-        actions: [
-          { title: 'Edited app.tsx', sheetKey: 'edited-app' },
-          { title: 'Read users.ts', sheetKey: 'read-users' },
-          { title: 'Ran migration tests', sheetKey: 'ran-tests' }
-        ]
-      }
-    ],
-    'auth-debug': [
-      {
-        id: 'd1',
-        role: 'user',
-        content: 'Identify lock issues with concurrency caches',
-        timestamp: '19:41:12'
-      },
-      {
-        id: 'd2',
-        role: 'assistant',
-        content: `I have isolated three blocking file synchronous calls inside \`src/core/autopilot.ts\`. I am replacing standard synchronous fs files operations with an asynchronous LRU cache wrap secured by a clean mutex locking primitive.`,
-        timestamp: '19:41:18',
-        actions: [
-          { title: 'Patched autopilot.ts', sheetKey: 'patched-autopilot' },
-          { title: 'Configured async Lock system', sheetKey: 'async-lock' }
-        ]
-      }
-    ],
-    'auth-refactor': [
-      {
-        id: 'p1',
-        role: 'user',
-        content: 'Refactor auth middleware caching sequence',
-        timestamp: '19:43:00'
-      },
-      {
-        id: 'p2',
-        role: 'assistant',
-        content: 'Autopilot sequence initiated for auth middleware caching parameter adjustment.',
-        timestamp: '19:43:02',
-        isAutopilotCard: true,
-        autopilotTitle: 'Refactor auth middleware',
-        autopilotStep: 'Step 2 of 5',
-        autopilotTotalSteps: 5,
-        autopilotStatus: 'running'
-      }
-    ]
-  });
+  // Active threads state dictionary
+  const [threads, setThreads] = useState<Record<string, ChatMessage[]>>({});
 
-  // Action detail dictionary mapping for Right Sheet renders
-  const actionDetailMap: Record<string, ActionDetail> = {
-    'edited-app': {
-      title: 'Edited app.tsx',
-      summary: [
-        'Added express router initialization for /api/v1/users',
-        'Registered body-parser schema validator middleware',
-        'Injected error middleware handling for duplicate database records'
-      ],
-      files: ['src/App.tsx', 'src/server.ts'],
-      tools: ['patch_file', 'lint_applet']
-    },
-    'read-users': {
-      title: 'Read users.ts',
-      summary: [
-        'Inspected relational schemas defined inside schema directory',
-        'Found and validated Type constraints for UserPayload attributes',
-        'Isolated database stream query indexes to align speed constraints'
-      ],
-      files: ['src/core/users.ts'],
-      tools: ['view_file', 'grep']
-    },
-    'ran-tests': {
-      title: 'Ran migration tests',
-      summary: [
-        'Spawned child process validator running local DB mocks',
-        'All 14 integration test scripts finished successfully',
-        'Zero schema migration overlap detected under stress parameter checks'
-      ],
-      files: ['tests/migration.spec.ts'],
-      tools: ['run_shell', 'compile_applet']
-    },
-    'patched-autopilot': {
-      title: 'Patched autopilot.ts',
-      summary: [
-        'Replaced fs.readFileSync with async fs.promises.readFile',
-        'Eliminated active main single loop blocking spikes under concurrent stress cycles',
-        'Optimized critical throughput path'
-      ],
-      files: ['src/core/autopilot.ts'],
-      tools: ['patch_file']
-    },
-    'async-lock': {
-      title: 'Configured async Lock system',
-      summary: [
-        'Introduced non-blocking atomic Mutex queue primitive',
-        'Prevented duplicate write overlaps when concurrent sessions execute together',
-        'Verified lock lifecycle release timeout intervals'
-      ],
-      files: ['src/core/locks.ts'],
-      tools: ['create_file', 'run_shell']
+  // Fetch initial data from API
+  useEffect(() => {
+    async function loadData() {
+      try {
+        const [sessionsData, statusData, context, apState] = await Promise.all([
+          api.getSessions(),
+          api.status(),
+          api.getContext(),
+          api.getAutopilotStatus(),
+        ]);
+        
+        setSessions(sessionsData.sessions || []);
+        setStatusInfo(statusData);
+        setContextData(context || []);
+        setAutopilotState({ 
+          running: apState.running, 
+          phase: apState.phase, 
+          iterations: apState.iterations 
+        });
+
+        // Load first session if available
+        const firstId = sessionsData.current || (sessionsData.sessions?.[0]?.id);
+        if (firstId) {
+          setCurrentSession(firstId);
+          const sessionData = await api.loadSession(firstId);
+          setThreads(prev => ({
+            ...prev,
+            [firstId]: (sessionData.messages || []).map((m: any, i: number) => ({
+              id: `msg-${firstId}-${i}`,
+              role: m.role || 'user',
+              content: m.content || '',
+              timestamp: m.time ? new Date(m.time).toLocaleTimeString() : new Date().toLocaleTimeString(),
+            }))
+          }));
+        }
+      } catch (err) {
+        console.warn('API unavailable, starting with empty state:', err);
+      } finally {
+        setLoading(false);
+      }
     }
-  };
+    loadData();
+  }, []);
+
+  // Reload thread messages when switching sessions
+  useEffect(() => {
+    if (!currentSession || threads[currentSession]) return;
+    
+    async function loadSessionMessages() {
+      try {
+        const sessionData = await api.loadSession(currentSession);
+        setThreads(prev => ({
+          ...prev,
+          [currentSession]: (sessionData.messages || []).map((m: any, i: number) => ({
+            id: `msg-${currentSession}-${i}`,
+            role: m.role || 'user',
+            content: m.content || '',
+            timestamp: m.time ? new Date(m.time).toLocaleTimeString() : new Date().toLocaleTimeString(),
+          }))
+        }));
+      } catch {
+        // Session may not exist yet, start fresh
+        setThreads(prev => ({
+          ...prev,
+          [currentSession]: []
+        }));
+      }
+    }
+    loadSessionMessages();
+  }, [currentSession]);
 
   // Helper notice notification
   const triggerNotification = (msg: string) => {
