@@ -382,7 +382,6 @@ export default function App() {
           workedExpandedId={workedExpandedId}
           onSetWorkedExpandedId={setWorkedExpandedId}
           onInspectAction={handleInspectAction}
-          onInspectAction={handleInspectAction}
         />
 
         {/* Right Drawer */}
