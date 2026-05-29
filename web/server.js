@@ -391,6 +391,7 @@ app.get('/api/sessions/:id', (req, res) => {
     const data = sessionManager.load(req.params.id);
     if (!data) return res.status(404).json({ error: 'Session not found' });
     currentSessionId = req.params.id;
+    sessionManager.sessionId = req.params.id;
     res.json(data);
   } catch (e) {
     res.status(500).json({ error: e.message });
