@@ -9,59 +9,59 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import crypto from 'crypto';
+import { execSync } from 'child_process';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // ─── Import Meow CLI Core Modules ───────────────────────────────────
-// We import via relative paths to the main meow-cli source
 const MEOW_CLI_SRC = path.join(__dirname, '..', 'src', 'modules');
 
-// ─── Safely import each meow-cli module individually ──────────────
-// Если один модуль не грузится, остальные продолжают работать
-async function safeImport(name, relativePath) {
+let configModule, persistenceModule, sessionsModule, costTrackerModule, authModule, apiModule, autopilotModule;
+
+async function loadModules() {
   try {
-    const mod = await import(path.join(MEOW_CLI_SRC, relativePath));
-    console.log(`  ✓ Loaded module: ${name}`);
-    return mod;
-  } catch (e) {
-    console.error(`  ✗ Failed to load module ${name}: ${e.message}`);
-    return {};
-  }
+    configModule = await import(path.join(MEOW_CLI_SRC, 'config.js'));
+    console.log('  ✓ Loaded module: config');
+  } catch (e) { console.error('  ✗ Failed config:', e.message); }
+
+  try {
+    persistenceModule = await import(path.join(MEOW_CLI_SRC, 'persistence.js'));
+    console.log('  ✓ Loaded module: persistence');
+  } catch (e) { console.error('  ✗ Failed persistence:', e.message); }
+
+  try {
+    sessionsModule = await import(path.join(MEOW_CLI_SRC, 'sessions.js'));
+    console.log('  ✓ Loaded module: sessions');
+  } catch (e) { console.error('  ✗ Failed sessions:', e.message); }
+
+  try {
+    costTrackerModule = await import(path.join(MEOW_CLI_SRC, 'cost-tracker.js'));
+    console.log('  ✓ Loaded module: cost-tracker');
+  } catch (e) { console.error('  ✗ Failed cost-tracker:', e.message); }
+
+  try {
+    authModule = await import(path.join(MEOW_CLI_SRC, 'auth.js'));
+    console.log('  ✓ Loaded module: auth');
+  } catch (e) { console.error('  ✗ Failed auth:', e.message); }
+
+  try {
+    apiModule = await import(path.join(MEOW_CLI_SRC, 'api.js'));
+    console.log('  ✓ Loaded module: api');
+  } catch (e) { console.error('  ✗ Failed api:', e.message); }
+
+  try {
+    autopilotModule = await import(path.join(MEOW_CLI_SRC, 'autopilot.js'));
+    console.log('  ✓ Loaded module: autopilot');
+  } catch (e) { console.error('  ✗ Failed autopilot:', e.message); }
 }
 
-let meowModules = {};
-try {
-  const [config, persistence, sessions, costTracker, auth, api, trust, projectContext] = await Promise.all([
-    safeImport('config', 'config.js'),
-    safeImport('persistence', 'persistence.js'),
-    safeImport('sessions', 'sessions.js'),
-    safeImport('costTracker', 'cost-tracker.js'),
-    safeImport('auth', 'auth.js'),
-    safeImport('api', 'api.js'),
-    safeImport('trust', 'trust.js'),
-    safeImport('projectContext', 'project-context.js'),
-  ]);
-  meowModules = { config, persistence, sessions, costTracker, auth, api, trust, projectContext };
-} catch (e) {
-  console.error('Fatal: module loading error:', e.message);
-}
+await loadModules();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-console.log('DEBUG: Express app created');
-
-// TEST: Quick route test right after app creation
-app.get('/api/debug', (req, res) => {
-  console.log('DEBUG ROUTE HIT!');
-  res.json({ debug: 'working' });
-});
-
-console.log('DEBUG: Test route registered');
-
 // ─── Tool-to-Activity-Type Mapper ────────────────────────────────────
-// Maps tool names to ActivityTimeline types for beautiful frontend rendering
 function toolToActivityType(toolName) {
   const toolMap = {
     'read_file':      'read',
@@ -92,60 +92,65 @@ function toolToActivityType(toolName) {
 app.use(cors({ origin: ['http://localhost:3000', 'http://localhost:5173', 'http://127.0.0.1:3000', 'http://localhost:3001'], credentials: true }));
 app.use(express.json({ limit: '10mb' }));
 
-// Debug: log all requests
 app.use((req, res, next) => {
   console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
   next();
 });
 
 // ─── Global State ───────────────────────────────────────────────────
-let currentSessionId = null;
 let sessionManager = null;
 let costTracker = null;
 
 try {
-  const { SessionManager } = meowModules.sessions;
-  sessionManager = new SessionManager();
-  currentSessionId = sessionManager.create();
+  if (sessionsModule?.SessionManager) {
+    sessionManager = new sessionsModule.SessionManager();
+    sessionManager.create();
+    console.log(`  ✓ Session created: ${sessionManager.sessionId}`);
+  }
 } catch (e) {
   console.error('Session manager init error:', e.message);
 }
 
 try {
-  const { CostTracker } = meowModules.costTracker;
-  costTracker = new CostTracker();
+  if (costTrackerModule?.CostTracker) {
+    costTracker = new costTrackerModule.CostTracker();
+  }
 } catch (e) {
   console.error('Cost tracker init error:', e.message);
 }
 
-// ─── Helper: Load Config ────────────────────────────────────────────
+// ─── Helper: Load/Save Config ───────────────────────────────────────
 function loadConfig() {
   try {
-    const { loadConfig: lc } = meowModules.persistence;
-    return lc();
+    if (persistenceModule?.loadConfig) return persistenceModule.loadConfig();
   } catch (e) {
-    try {
-      const { DEFAULT_CONFIG } = meowModules.config;
-      return { ...DEFAULT_CONFIG };
-    } catch {
-      return {};
-    }
+    console.error('loadConfig error:', e.message);
   }
+  try {
+    if (configModule?.DEFAULT_CONFIG) return { ...configModule.DEFAULT_CONFIG };
+  } catch {}
+  return {};
 }
 
 function saveConfig(cfg) {
   try {
-    const { saveConfig: sc } = meowModules.persistence;
-    sc(cfg);
-    return true;
+    if (persistenceModule?.saveConfig) {
+      persistenceModule.saveConfig(cfg);
+      return true;
+    }
   } catch (e) {
-    return false;
+    console.error('saveConfig error:', e.message);
   }
+  return false;
 }
 
-// ─── API Routes ─────────────────────────────────────────────────────
+// ─── Routes ─────────────────────────────────────────────────────────
 
-// TEST: sanity check route (must work)
+// Test routes
+app.get('/api/debug', (req, res) => {
+  res.json({ debug: 'working', modules: { config: !!configModule, persistence: !!persistenceModule, sessions: !!sessionsModule, cost: !!costTrackerModule, auth: !!authModule, api: !!apiModule, autopilot: !!autopilotModule } });
+});
+
 app.get('/api/ping', (req, res) => {
   res.json({ pong: true, time: Date.now() });
 });
@@ -156,12 +161,15 @@ app.get('/api/health', (req, res) => {
 });
 
 app.get('/api/info', (req, res) => {
-  const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'));
+  let pkg = { version: '0.0.0', name: 'meow-cli', description: '' };
+  try {
+    pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'));
+  } catch {}
   res.json({
     version: pkg.version,
     name: pkg.name,
     description: pkg.description,
-    dataDir: meowModules.config?.DATA_DIR || '~/.meowcli/data',
+    dataDir: configModule?.DATA_DIR || '~/.meowcli/data',
     cwd: process.cwd(),
   });
 });
@@ -170,14 +178,13 @@ app.get('/api/info', (req, res) => {
 app.get('/api/config', (req, res) => {
   try {
     const cfg = loadConfig();
-    // Don't expose full API keys
-    const safe = { ...cfg };
-    if (safe.api_key) safe.api_key = safe.api_key.substring(0, 8) + '...' + safe.api_key.substring(safe.api_key.length - 4);
+    const safe = JSON.parse(JSON.stringify(cfg));
+    if (safe.api_key && safe.api_key.length > 12) safe.api_key = safe.api_key.substring(0, 8) + '...' + safe.api_key.substring(safe.api_key.length - 4);
     if (safe.providers) {
       safe.providers = Object.fromEntries(
         Object.entries(safe.providers).map(([k, v]) => {
           const p = { ...v };
-          if (p.api_key) p.api_key = p.api_key.substring(0, 8) + '...' + p.api_key.substring(p.api_key.length - 4);
+          if (p.api_key && p.api_key.length > 12) p.api_key = p.api_key.substring(0, 8) + '...' + p.api_key.substring(p.api_key.length - 4);
           return [k, p];
         })
       );
@@ -192,16 +199,17 @@ app.put('/api/config', (req, res) => {
   try {
     const existing = loadConfig();
     const updates = req.body;
-    // Merge updates
     const merged = { ...existing, ...updates };
-    // Handle nested objects properly
-    if (updates.git) merged.git = { ...existing.git, ...updates.git };
-    if (updates.autopilot) merged.autopilot = { ...existing.autopilot, ...updates.autopilot };
-    if (updates.prompt_optimizer) merged.prompt_optimizer = { ...existing.prompt_optimizer, ...updates.prompt_optimizer };
+    // Deep-merge nested objects
+    for (const key of ['git', 'autopilot', 'prompt_optimizer', 'vacuum']) {
+      if (updates[key]) merged[key] = { ...existing[key], ...updates[key] };
+    }
     if (updates.profiles) merged.profiles = { ...existing.profiles, ...updates.profiles };
     if (updates.providers) merged.providers = { ...existing.providers, ...updates.providers };
     if (updates.aliases) merged.aliases = { ...existing.aliases, ...updates.aliases };
-    
+    if (updates.templates) merged.templates = { ...existing.templates, ...updates.templates };
+    if (updates.plugins) merged.plugins = { ...existing.plugins, ...updates.plugins };
+
     saveConfig(merged);
     res.json({ success: true, message: 'Config saved' });
   } catch (e) {
@@ -316,11 +324,10 @@ app.get('/api/providers', (req, res) => {
   try {
     const cfg = loadConfig();
     const providers = cfg.providers || {};
-    // Mask API keys
     const safe = Object.fromEntries(
       Object.entries(providers).map(([k, v]) => {
         const p = { ...v };
-        if (p.api_key) p.api_key = p.api_key.substring(0, 8) + '...' + p.api_key.substring(p.api_key.length - 4);
+        if (p.api_key && p.api_key.length > 12) p.api_key = p.api_key.substring(0, 8) + '...' + p.api_key.substring(p.api_key.length - 4);
         return [k, p];
       })
     );
@@ -387,7 +394,6 @@ app.put('/api/providers/:id/activate', (req, res) => {
       return res.status(404).json({ error: `Provider '${id}' not found` });
     }
     cfg.active_provider = id;
-    // Apply provider settings to main config
     const provider = cfg.providers[id];
     if (provider.base_url) cfg.api_base = provider.base_url;
     if (provider.api_key) cfg.api_key = provider.api_key;
@@ -403,11 +409,11 @@ app.put('/api/providers/:id/activate', (req, res) => {
 // ─── Session Management ─────────────────────────────────────────────
 app.get('/api/sessions', (req, res) => {
   try {
-    if (!sessionManager) return res.json({ sessions: [] });
+    if (!sessionManager) return res.json({ sessions: [], current: null });
     const sessions = sessionManager.list();
     res.json({
       sessions,
-      current: currentSessionId,
+      current: sessionManager.sessionId,
     });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -417,11 +423,15 @@ app.get('/api/sessions', (req, res) => {
 app.post('/api/sessions', (req, res) => {
   try {
     if (!sessionManager) {
-      const { SessionManager } = meowModules.sessions;
-      sessionManager = new SessionManager();
+      if (sessionsModule?.SessionManager) {
+        sessionManager = new sessionsModule.SessionManager();
+      } else {
+        return res.status(500).json({ error: 'Session manager unavailable' });
+      }
     }
-    currentSessionId = sessionManager.create();
-    res.json({ sessionId: currentSessionId, message: 'New session created' });
+    const id = sessionManager.create();
+    console.log(`  ✓ New session created: ${id}`);
+    res.json({ sessionId: id, message: 'New session created' });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -432,8 +442,6 @@ app.get('/api/sessions/:id', (req, res) => {
     if (!sessionManager) return res.status(404).json({ error: 'No session manager' });
     const data = sessionManager.load(req.params.id);
     if (!data) return res.status(404).json({ error: 'Session not found' });
-    currentSessionId = req.params.id;
-    sessionManager.sessionId = req.params.id;
     res.json(data);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -445,7 +453,9 @@ app.delete('/api/sessions/:id', (req, res) => {
     if (!sessionManager) return res.status(404).json({ error: 'No session manager' });
     const deleted = sessionManager.delete(req.params.id);
     if (deleted) {
-      if (currentSessionId === req.params.id) currentSessionId = sessionManager.create();
+      if (sessionManager.sessionId === req.params.id) {
+        sessionManager.create();
+      }
       res.json({ success: true, message: 'Session deleted' });
     } else {
       res.status(404).json({ error: 'Session not found' });
@@ -462,28 +472,26 @@ app.post('/api/chat', async (req, res) => {
     if (!messages || !Array.isArray(messages)) {
       return res.status(400).json({ error: 'Messages array required' });
     }
-    
+
     const cfg = loadConfig();
     if (!cfg.api_key) {
       return res.status(400).json({ error: 'API key not configured. Set it in Settings.' });
     }
-    
+
     const effectiveModel = model || cfg.model;
     const effectiveCfg = { ...cfg, model: effectiveModel };
-    
-    try {
-      const { callApi } = meowModules.api;
-      const data = await callApi(messages, effectiveCfg);
-      
-      // Record cost
-      if (costTracker && data.usage) {
-        costTracker.record(data.usage, effectiveModel);
-      }
-      
-      res.json(data);
-    } catch (apiErr) {
-      res.status(502).json({ error: `API Error: ${apiErr.message}` });
+
+    if (!apiModule?.callApi) {
+      return res.status(500).json({ error: 'API module not loaded' });
     }
+
+    const data = await apiModule.callApi(messages, effectiveCfg);
+
+    if (costTracker && data.usage) {
+      costTracker.record(data.usage, effectiveModel);
+    }
+
+    res.json(data);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -496,28 +504,32 @@ app.post('/api/chat/stream', async (req, res) => {
     if (!messages || !Array.isArray(messages)) {
       return res.status(400).json({ error: 'Messages array required' });
     }
-    
+
     const cfg = loadConfig();
     if (!cfg.api_key) {
       return res.status(400).json({ error: 'API key not configured' });
     }
-    
+
     const effectiveModel = model || cfg.model;
     const effectiveCfg = { ...cfg, model: effectiveModel };
-    
-    // SSE headers
+
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
     res.setHeader('X-Accel-Buffering', 'no');
-    
+
+    if (!apiModule?.callApiStream) {
+      res.write(`data: ${JSON.stringify({ type: 'error', error: 'API stream module not loaded' })}\n\n`);
+      res.end();
+      return;
+    }
+
     try {
-      const { callApiStream } = meowModules.api;
       let fullContent = '';
       let toolCalls = [];
       let usage = null;
-      
-      await callApiStream(messages, effectiveCfg, (chunk) => {
+
+      await apiModule.callApiStream(messages, effectiveCfg, (chunk) => {
         if (chunk.type === 'text' && chunk.content) {
           fullContent += chunk.content;
           res.write(`data: ${JSON.stringify({ type: 'content', content: chunk.content })}\n\n`);
@@ -531,50 +543,45 @@ app.post('/api/chat/stream', async (req, res) => {
           }
           if (result.usage) usage = result.usage;
         }
-        
-        // ─── Send structured tool_call events (instead of ugly markdown fallback) ───
+
         if (toolCalls && toolCalls.length > 0) {
           for (const tc of toolCalls) {
             const name = tc.function?.name || tc.name || 'unknown';
             let args = {};
             try {
-              args = typeof tc.function?.arguments === 'string' 
-                ? JSON.parse(tc.function.arguments) 
+              args = typeof tc.function?.arguments === 'string'
+                ? JSON.parse(tc.function.arguments)
                 : (tc.function?.arguments || tc.input || {});
             } catch {
               args = { raw: String(tc.function?.arguments || '') };
             }
-            
-            // Map tool type for frontend ActivityTimeline
+
             const toolType = toolToActivityType(name);
-            
-            res.write(`data: ${JSON.stringify({ 
-              type: 'tool_call', 
+
+            res.write(`data: ${JSON.stringify({
+              type: 'tool_call',
               id: tc.id || `tc-${Date.now()}`,
-              name, 
+              name,
               args,
               toolType
             })}\n\n`);
           }
         }
-        
-        // If no text content but tools were called, set a clean message
+
         if (!fullContent && toolCalls && toolCalls.length > 0) {
           fullContent = 'Выполняю задачу... использую инструменты для работы с файлами и системой.';
           res.write(`data: ${JSON.stringify({ type: 'content', content: fullContent })}\n\n`);
         }
-        
-        // Record cost
+
         if (costTracker && usage) {
           costTracker.record(usage, effectiveModel);
         }
-        
-        // Send final message
-        res.write(`data: ${JSON.stringify({ 
-          type: 'done', 
-          content: fullContent, 
+
+        res.write(`data: ${JSON.stringify({
+          type: 'done',
+          content: fullContent,
           tool_calls: toolCalls,
-          usage 
+          usage
         })}\n\n`);
         res.end();
       });
@@ -590,12 +597,12 @@ app.post('/api/chat/stream', async (req, res) => {
 // ─── Cost Tracking ──────────────────────────────────────────────────
 app.get('/api/cost', (req, res) => {
   try {
-    if (!costTracker) return res.json({ session: null, total: null });
+    if (!costTracker) return res.json({ session: null, total: null, history: [], modelPrices: {} });
     res.json({
       session: costTracker.sessionCost,
       total: costTracker.totalCost,
-      history: costTracker.history.slice(-20),
-      modelPrices: meowModules.costTracker?.MODEL_PRICES || {},
+      history: costTracker.history?.slice(-20) || [],
+      modelPrices: costTrackerModule?.MODEL_PRICES || {},
     });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -605,7 +612,7 @@ app.get('/api/cost', (req, res) => {
 app.post('/api/cost/reset', (req, res) => {
   try {
     if (!costTracker) return res.status(404).json({ error: 'No cost tracker' });
-    costTracker.resetTotal();
+    if (typeof costTracker.resetTotal === 'function') costTracker.resetTotal();
     res.json({ success: true, message: 'Cost tracking reset' });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -638,13 +645,12 @@ app.put('/api/templates', (req, res) => {
 app.get('/api/theme', (req, res) => {
   try {
     const cfg = loadConfig();
-    const themeFile = path.join(meowModules.config?.DATA_DIR || path.join(process.env.HOME || '/tmp', '.meowcli', 'data'), '..', '..', 'themes.json');
+    const themeFile = path.join(configModule?.DATA_DIR || path.join(process.env.HOME || '/tmp', '.meowcli', 'data'), '..', '..', 'themes.json');
     let themes = {};
     try {
       themes = JSON.parse(fs.readFileSync(themeFile, 'utf8'));
     } catch {}
-    
-    // Convert to web-friendly format
+
     const webThemes = {};
     for (const [name, colors] of Object.entries(themes)) {
       webThemes[name] = {
@@ -660,7 +666,7 @@ app.get('/api/theme', (req, res) => {
         muted: colors.muted || '#52525b',
       };
     }
-    
+
     res.json({
       current: cfg.theme || 'default',
       themes: webThemes,
@@ -687,7 +693,7 @@ app.get('/api/status', (req, res) => {
   try {
     const cfg = loadConfig();
     const hasApiKey = !!(cfg.api_key || Object.values(cfg.providers || {}).some(p => p.api_key));
-    
+
     res.json({
       apiKeyConfigured: hasApiKey,
       activeModel: cfg.model || 'not set',
@@ -705,7 +711,7 @@ app.get('/api/status', (req, res) => {
   }
 });
 
-// ─── Models List (Common models) ────────────────────────────────────
+// ─── Models List ────────────────────────────────────────────────────
 app.get('/api/models', (req, res) => {
   const commonModels = [
     { id: 'gpt-4-turbo', name: 'GPT-4 Turbo', provider: 'openai' },
@@ -722,24 +728,28 @@ app.get('/api/models', (req, res) => {
     { id: 'gemini-2.0-pro', name: 'Gemini 2.0 Pro', provider: 'google' },
     { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro', provider: 'google' },
   ];
-  
+
   res.json(commonModels);
 });
 
 // ─── Project Context (MEOW.md) ──────────────────────────────────────
 app.get('/api/context', (req, res) => {
   try {
-    const { loadProjectContext } = meowModules.projectContext;
-    const context = loadProjectContext();
-    res.json(context);
+    const ctxFile = path.join(process.cwd(), 'MEOW.md');
+    if (fs.existsSync(ctxFile)) {
+      const content = fs.readFileSync(ctxFile, 'utf8');
+      res.json({ content, path: ctxFile });
+    } else {
+      res.json({ content: '', path: ctxFile });
+    }
   } catch (e) {
-    res.json([]);
+    res.json({ content: '', path: '' });
   }
 });
 
-// ─── Work Directory (PWD) ───────────────────────────────────────────
+// ─── Work Directory (CWD) ───────────────────────────────────────────
 app.get('/api/cwd', (req, res) => {
-  res.json({ cwd: process.cwd(), dataDir: meowModules.config?.DATA_DIR || '' });
+  res.json({ cwd: process.cwd(), dataDir: configModule?.DATA_DIR || '' });
 });
 
 app.put('/api/cwd', (req, res) => {
@@ -749,21 +759,10 @@ app.put('/api/cwd', (req, res) => {
     if (!fs.existsSync(cwd)) return res.status(400).json({ error: `Directory does not exist: ${cwd}` });
     const stat = fs.statSync(cwd);
     if (!stat.isDirectory()) return res.status(400).json({ error: `Not a directory: ${cwd}` });
-    
+
     process.chdir(cwd);
     const newCwd = process.cwd();
-    
-    // Update session cwd
-    if (currentSessionId && sessionManager) {
-      try {
-        const data = sessionManager.load(currentSessionId);
-        if (data) {
-          sessionManager.sessionId = currentSessionId;
-          sessionManager.save({ ...data, cwd: newCwd });
-        }
-      } catch {}
-    }
-    
+
     res.json({ success: true, cwd: newCwd, message: `Changed to ${newCwd}` });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -775,18 +774,17 @@ app.get('/api/files/read', (req, res) => {
   try {
     const filePath = req.query.path;
     if (!filePath) return res.status(400).json({ error: 'path query param required' });
-    
-    // Sandbox: resolve against CWD
+
     const resolved = path.resolve(process.cwd(), filePath);
     if (!resolved.startsWith(process.cwd())) {
       return res.status(403).json({ error: 'Path outside CWD not allowed' });
     }
     if (!fs.existsSync(resolved)) return res.status(404).json({ error: 'File not found' });
-    
+
     const content = fs.readFileSync(resolved, 'utf8');
     const stat = fs.statSync(resolved);
-    res.json({ 
-      path: resolved, 
+    res.json({
+      path: resolved,
       size: stat.size,
       mtime: stat.mtime,
       content,
@@ -801,15 +799,15 @@ app.post('/api/files/write', (req, res) => {
   try {
     const { path: filePath, content } = req.body;
     if (!filePath || content === undefined) return res.status(400).json({ error: 'path and content required' });
-    
+
     const resolved = path.resolve(process.cwd(), filePath);
     if (!resolved.startsWith(process.cwd())) {
       return res.status(403).json({ error: 'Path outside CWD not allowed' });
     }
-    
+
     fs.mkdirSync(path.dirname(resolved), { recursive: true });
     fs.writeFileSync(resolved, content, 'utf8');
-    
+
     res.json({ success: true, path: resolved, size: content.length });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -824,7 +822,7 @@ app.post('/api/files/list', (req, res) => {
       return res.status(403).json({ error: 'Path outside CWD not allowed' });
     }
     if (!fs.existsSync(resolved)) return res.status(404).json({ error: 'Directory not found' });
-    
+
     const entries = fs.readdirSync(resolved, { withFileTypes: true });
     const files = entries.map(e => ({
       name: e.name,
@@ -832,7 +830,7 @@ app.post('/api/files/list', (req, res) => {
       isFile: e.isFile(),
       size: e.isFile() ? fs.statSync(path.join(resolved, e.name)).size : 0,
     }));
-    
+
     res.json({ path: resolved, files });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -840,64 +838,52 @@ app.post('/api/files/list', (req, res) => {
 });
 
 // ─── Autopilot Routes ───────────────────────────────────────────────
-let autopilotInstance = null;
+let autopilotRunner = null;
 let autopilotRunning = false;
 
 app.post('/api/autopilot/execute', async (req, res) => {
   try {
     const { task, model } = req.body;
     if (!task) return res.status(400).json({ error: 'task required' });
-    
+
     const cfg = loadConfig();
     if (!cfg.api_key) return res.status(400).json({ error: 'API key not configured' });
-    
-    // Import autopilot module — exports { Autopilot, ... }
-    let AutopilotClass;
-    try {
-      const autopilotModule = await import(path.join(MEOW_CLI_SRC, 'autopilot.js'));
-      AutopilotClass = autopilotModule.Autopilot;
-    } catch (e) {
-      return res.status(500).json({ error: `Cannot load autopilot: ${e.message}` });
-    }
-    
-    if (!AutopilotClass) {
+
+    if (!autopilotModule?.Autopilot) {
       return res.status(500).json({ error: 'Autopilot module not available' });
     }
-    
-    // Build initial messages with system prompt + user task
+
+    const AutopilotClass = autopilotModule.Autopilot;
     const effectiveModel = model || cfg.model;
     const effectiveCfg = { ...cfg, model: effectiveModel };
-    const systemContent = cfg.profiles?.[cfg.profile || 'default']?.system || 
+    const systemContent = cfg.profiles?.[cfg.profile || 'default']?.system ||
       'Ты — опытный инженер-программист. Твои ответы кратки, точны и по существу.';
-    
+
     const messages = [
       { role: 'system', content: systemContent },
       { role: 'user', content: task },
     ];
-    
-    // Create Autopilot instance — constructor(cfg, messages, saveCallback)
+
     const runner = new AutopilotClass(effectiveCfg, messages, (state) => {
-      // Save callback: persist autopilot state
       try {
-        if (currentSessionId && sessionManager) {
-          const data = sessionManager.load(currentSessionId) || {};
+        if (sessionManager?.sessionId) {
+          const data = sessionManager.load(sessionManager.sessionId) || {};
           sessionManager.save({ ...data, ...state, autopilot: true });
         }
       } catch {}
     });
-    
-    autopilotInstance = runner;
+
+    autopilotRunner = runner;
     autopilotRunning = true;
-    
-    res.json({ 
-      success: true, 
+
+    res.json({
+      success: true,
       message: 'Autopilot started',
       task,
       model: effectiveModel,
       maxIterations: effectiveCfg.autopilot?.max_iterations || 50,
     });
-    
-    // Execute async (non-blocking) — Autopilot.run() writes to this.messages internally
+
     runner.running = true;
     runner.run().catch(err => {
       console.error('Autopilot error:', err.message);
@@ -914,18 +900,18 @@ app.post('/api/autopilot/execute', async (req, res) => {
 app.get('/api/autopilot/status', (req, res) => {
   res.json({
     running: autopilotRunning,
-    hasInstance: !!autopilotInstance,
-    phase: autopilotInstance?.currentPhase || 'idle',
-    iterations: autopilotInstance?.iteration || 0,
-    errors: autopilotInstance?.errors || 0,
+    hasInstance: !!autopilotRunner,
+    phase: autopilotRunner?.currentPhase || 'idle',
+    iterations: autopilotRunner?.iteration || 0,
+    errors: autopilotRunner?.errors || 0,
   });
 });
 
 app.post('/api/autopilot/cancel', (req, res) => {
-  if (autopilotInstance && typeof autopilotInstance.abort === 'function') {
-    autopilotInstance.abort();
-  } else if (autopilotInstance) {
-    autopilotInstance.running = false;
+  if (autopilotRunner && typeof autopilotRunner.abort === 'function') {
+    autopilotRunner.abort();
+  } else if (autopilotRunner) {
+    autopilotRunner.running = false;
   }
   autopilotRunning = false;
   res.json({ success: true, message: 'Autopilot cancelled' });
@@ -936,16 +922,14 @@ app.post('/api/sessions/:id/save', (req, res) => {
   try {
     const { id } = req.params;
     const { messages, model, profile } = req.body;
-    
+
     if (!sessionManager) {
       return res.status(404).json({ error: 'No session manager' });
     }
-    
-    // Load first to set sessionManager.sessionId = id
+
     const data = sessionManager.load(id) || {};
-    // Ensure sessionManager.sessionId matches the requested session
-    sessionManager.sessionId = id;
-    
+    // load() already sets sessionManager.sessionId = id
+
     const saveData = {
       ...data,
       model: model || data.model || '',
@@ -953,7 +937,7 @@ app.post('/api/sessions/:id/save', (req, res) => {
       messages: messages || data.messages || [],
       messagesCount: (messages || data.messages || []).length,
     };
-    
+
     sessionManager.save(saveData);
     res.json({ success: true, message: 'Session saved' });
   } catch (e) {
@@ -966,21 +950,20 @@ app.post('/api/shell/exec', async (req, res) => {
   try {
     const { command, timeout } = req.body;
     if (!command) return res.status(400).json({ error: 'command required' });
-    
-    const { execSync } = await import('child_process');
+
     const maxTimeout = Math.min(timeout || 30000, 60000);
-    
+
     const stdout = execSync(command, {
       cwd: process.cwd(),
       timeout: maxTimeout,
       encoding: 'utf8',
       maxBuffer: 1024 * 1024,
     });
-    
+
     res.json({ stdout, stderr: '', exitCode: 0 });
   } catch (e) {
-    res.json({ 
-      stdout: e.stdout || '', 
+    res.json({
+      stdout: e.stdout || '',
       stderr: e.stderr || e.message,
       exitCode: e.status || 1,
       error: e.message,
@@ -991,11 +974,15 @@ app.post('/api/shell/exec', async (req, res) => {
 // ─── Auth ───────────────────────────────────────────────────────────
 app.get('/api/auth/status', (req, res) => {
   try {
-    const { authManager: am } = meowModules.auth;
-    res.json({
-      authenticated: !!am.token,
-      user: am.user,
-    });
+    if (authModule?.authManager) {
+      const am = authModule.authManager;
+      res.json({
+        authenticated: !!am.session,
+        user: am.session || null,
+      });
+    } else {
+      res.json({ authenticated: false, user: null });
+    }
   } catch (e) {
     res.json({ authenticated: false, user: null });
   }
@@ -1003,22 +990,20 @@ app.get('/api/auth/status', (req, res) => {
 
 app.post('/api/auth/logout', (req, res) => {
   try {
-    const { authManager: am } = meowModules.auth;
-    const cfg = loadConfig();
-    am.logout(cfg);
-    saveConfig(cfg);
+    if (authModule?.authManager) {
+      authModule.authManager.session = null;
+    }
     res.json({ success: true, message: 'Logged out' });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
 
-// ─── Serve Static Files (Vite build output) ─────────────────────────
+// ─── Serve Static Files ─────────────────────────────────────────────
 const distPath = path.join(__dirname, 'dist');
 if (fs.existsSync(distPath)) {
   app.use('/assets', express.static(path.join(distPath, 'assets')));
   app.use('/src', express.static(distPath));
-  // SPA fallback (catch-all for non-API routes)
   app.use((req, res, next) => {
     if (req.path.startsWith('/api/')) return next();
     res.sendFile(path.join(distPath, 'index.html'), (err) => {
@@ -1027,21 +1012,19 @@ if (fs.existsSync(distPath)) {
   });
 }
 
-// Добавьте ЭТОТ блок перед `app.listen` или после настройки статики
 app.get('/', (req, res) => {
   const indexPath = path.join(__dirname, 'dist', 'index.html');
   if (fs.existsSync(indexPath)) {
     res.sendFile(indexPath);
   } else {
-    // Если нет собранного фронта, показываем страницу-заглушку
     res.send(`
       <!DOCTYPE html>
       <html>
       <head><title>Meow CLI Web</title></head>
       <body style="font-family: monospace; padding: 2rem;">
         <h1>🐱 Meow CLI Web Server</h1>
-        <p>Сервер работает, но фронтенд не собран.</p>
-        <p>📡 API доступен по адресу: <a href="/api/health">/api/health</a></p>
+        <p>Server is running, but frontend is not built.</p>
+        <p>📡 API: <a href="/api/health">/api/health</a></p>
         <hr>
         <pre>API endpoints:
   GET  /api/health
