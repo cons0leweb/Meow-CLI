@@ -17,20 +17,34 @@ const __dirname = path.dirname(__filename);
 // We import via relative paths to the main meow-cli source
 const MEOW_CLI_SRC = path.join(__dirname, '..', 'src', 'modules');
 
+// ─── Safely import each meow-cli module individually ──────────────
+// Если один модуль не грузится, остальные продолжают работать
+async function safeImport(name, relativePath) {
+  try {
+    const mod = await import(path.join(MEOW_CLI_SRC, relativePath));
+    console.log(`  ✓ Loaded module: ${name}`);
+    return mod;
+  } catch (e) {
+    console.error(`  ✗ Failed to load module ${name}: ${e.message}`);
+    return {};
+  }
+}
+
 let meowModules = {};
 try {
-  meowModules = {
-    config: await import(path.join(MEOW_CLI_SRC, 'config.js')),
-    persistence: await import(path.join(MEOW_CLI_SRC, 'persistence.js')),
-    sessions: await import(path.join(MEOW_CLI_SRC, 'sessions.js')),
-    costTracker: await import(path.join(MEOW_CLI_SRC, 'cost-tracker.js')),
-    auth: await import(path.join(MEOW_CLI_SRC, 'auth.js')),
-    api: await import(path.join(MEOW_CLI_SRC, 'api.js')),
-    trust: await import(path.join(MEOW_CLI_SRC, 'trust.js')),
-    projectContext: await import(path.join(MEOW_CLI_SRC, 'project-context.js')),
-  };
+  const [config, persistence, sessions, costTracker, auth, api, trust, projectContext] = await Promise.all([
+    safeImport('config', 'config.js'),
+    safeImport('persistence', 'persistence.js'),
+    safeImport('sessions', 'sessions.js'),
+    safeImport('costTracker', 'cost-tracker.js'),
+    safeImport('auth', 'auth.js'),
+    safeImport('api', 'api.js'),
+    safeImport('trust', 'trust.js'),
+    safeImport('projectContext', 'project-context.js'),
+  ]);
+  meowModules = { config, persistence, sessions, costTracker, auth, api, trust, projectContext };
 } catch (e) {
-  console.error('Failed to import meow CLI modules:', e.message);
+  console.error('Fatal: module loading error:', e.message);
 }
 
 const app = express();
