@@ -210,6 +210,47 @@ export default function App() {
     setTimeout(() => setShowNotification(null), 3500);
   }, []);
 
+  // Autopilot handlers
+  const handleAutopilotStart = useCallback(async (task: string, model?: string) => {
+    triggerNotification(`Autopilot started: ${task.slice(0, 40)}...`);
+    // Add a chat message showing autopilot started
+    const timestamp = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+    const autopilotMsg: ChatMessage = {
+      id: `autopilot-${Date.now()}`,
+      role: 'assistant',
+      content: `**Autopilot task:** ${task}\n\nRunning autonomously...`,
+      timestamp,
+      isAutopilotCard: true,
+      autopilotTitle: task,
+      autopilotStep: 'Running',
+      autopilotTotalSteps: 1,
+      autopilotStatus: 'running',
+    };
+    setSessionMessages(prev => ({
+      ...prev,
+      [currentSession]: [...(prev[currentSession] || []), autopilotMsg],
+    }));
+  }, [currentSession, triggerNotification]);
+
+  const handleAutopilotStop = useCallback(() => {
+    triggerNotification('Autopilot stopped');
+  }, [triggerNotification]);
+
+  // Auto-save session after messages change
+  const saveCurrentSession = useCallback(async (msgs: ChatMessage[]) => {
+    if (!currentSession || msgs.length === 0) return;
+    try {
+      await api.saveSession(currentSession, {
+        messages: msgs.map(m => ({ role: m.role, content: m.content })),
+        model: config.model,
+        profile: config.profile,
+      });
+    } catch (e: any) {
+      // Silent fail for save
+      console.debug('Session auto-save error:', e.message);
+    }
+  }, [currentSession, config.model, config.profile]);
+
   // Helpers
   const getDefaultPrompt = () => {
     if (!config.lang || config.lang === 'ru') {
