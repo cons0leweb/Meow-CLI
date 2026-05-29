@@ -95,6 +95,11 @@ function saveConfig(cfg) {
 
 // ─── API Routes ─────────────────────────────────────────────────────
 
+// TEST: sanity check route (must work)
+app.get('/api/ping', (req, res) => {
+  res.json({ pong: true, time: Date.now() });
+});
+
 // ─── Health & Info ──────────────────────────────────────────────────
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', version: '3.0.4', name: 'meow-cli-web' });
