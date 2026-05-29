@@ -798,40 +798,55 @@ app.post('/api/autopilot/execute', async (req, res) => {
     const cfg = loadConfig();
     if (!cfg.api_key) return res.status(400).json({ error: 'API key not configured' });
     
-    // Import autopilot module
-    let AutopilotRunner;
+    // Import autopilot module — exports { Autopilot, ... }
+    let AutopilotClass;
     try {
       const autopilotModule = await import(path.join(MEOW_CLI_SRC, 'autopilot.js'));
-      AutopilotRunner = autopilotModule.AutopilotRunner;
+      AutopilotClass = autopilotModule.Autopilot;
     } catch (e) {
       return res.status(500).json({ error: `Cannot load autopilot: ${e.message}` });
     }
     
-    if (!AutopilotRunner) {
+    if (!AutopilotClass) {
       return res.status(500).json({ error: 'Autopilot module not available' });
     }
     
-    const runner = new AutopilotRunner({
-      model: model || cfg.model,
-      config: cfg,
-      maxIterations: cfg.autopilot?.max_iterations || 50,
-      maxErrors: cfg.autopilot?.max_errors || 5,
+    // Build initial messages with system prompt + user task
+    const effectiveModel = model || cfg.model;
+    const effectiveCfg = { ...cfg, model: effectiveModel };
+    const systemContent = cfg.profiles?.[cfg.profile || 'default']?.system || 
+      'Ты — опытный инженер-программист. Твои ответы кратки, точны и по существу.';
+    
+    const messages = [
+      { role: 'system', content: systemContent },
+      { role: 'user', content: task },
+    ];
+    
+    // Create Autopilot instance — constructor(cfg, messages, saveCallback)
+    const runner = new AutopilotClass(effectiveCfg, messages, (state) => {
+      // Save callback: persist autopilot state
+      try {
+        if (currentSessionId && sessionManager) {
+          const data = sessionManager.load(currentSessionId) || {};
+          sessionManager.save({ ...data, ...state, autopilot: true });
+        }
+      } catch {}
     });
     
     autopilotInstance = runner;
     autopilotRunning = true;
     
-    // Run in background - use SSE or just return initial status
     res.json({ 
       success: true, 
       message: 'Autopilot started',
       task,
-      model: model || cfg.model,
-      maxIterations: cfg.autopilot?.max_iterations || 50,
+      model: effectiveModel,
+      maxIterations: effectiveCfg.autopilot?.max_iterations || 50,
     });
     
-    // Execute async (non-blocking)
-    runner.run(task).catch(err => {
+    // Execute async (non-blocking) — Autopilot.run() writes to this.messages internally
+    runner.running = true;
+    runner.run().catch(err => {
       console.error('Autopilot error:', err.message);
       autopilotRunning = false;
     }).finally(() => {
@@ -847,15 +862,17 @@ app.get('/api/autopilot/status', (req, res) => {
   res.json({
     running: autopilotRunning,
     hasInstance: !!autopilotInstance,
-    phase: autopilotInstance?.phase || 'idle',
+    phase: autopilotInstance?.currentPhase || 'idle',
     iterations: autopilotInstance?.iteration || 0,
     errors: autopilotInstance?.errors || 0,
   });
 });
 
 app.post('/api/autopilot/cancel', (req, res) => {
-  if (autopilotInstance && typeof autopilotInstance.cancel === 'function') {
-    autopilotInstance.cancel();
+  if (autopilotInstance && typeof autopilotInstance.abort === 'function') {
+    autopilotInstance.abort();
+  } else if (autopilotInstance) {
+    autopilotInstance.running = false;
   }
   autopilotRunning = false;
   res.json({ success: true, message: 'Autopilot cancelled' });
