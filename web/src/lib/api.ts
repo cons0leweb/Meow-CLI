@@ -312,12 +312,20 @@ export interface AuthStatusResponse {
 
 // ─── SSE Chat (Streaming) ───────────────────────────────────────────
 
+export interface ToolCallEvent {
+  id: string;
+  name: string;
+  args: Record<string, any>;
+  toolType: string;
+}
+
 export function createChatStream(
   messages: any[],
   model?: string,
   onChunk?: (content: string) => void,
   onDone?: (result: { content: string; tool_calls: any[]; usage: any }) => void,
-  onError?: (error: string) => void
+  onError?: (error: string) => void,
+  onToolCall?: (toolCall: ToolCallEvent) => void
 ): AbortController {
   const controller = new AbortController();
   const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';

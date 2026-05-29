@@ -301,7 +301,7 @@ export default function App() {
           <div className="w-5 h-5 rounded-md bg-zinc-900 border border-zinc-800 flex items-center justify-center font-bold text-[11px] text-[#ff7043]">
             M
           </div>
-          <span className="font-semibold text-xs text-white tracking-tight uppercase">Meow Core Client</span>
+          <span className="font-semibold text-xs text-white tracking-tight uppercase">MeowCLI - Web UI</span>
           <span className="h-3 w-[1px] bg-zinc-800" />
           <div className="flex items-center gap-1">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
