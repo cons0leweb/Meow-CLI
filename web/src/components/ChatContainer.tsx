@@ -413,27 +413,49 @@ export function ChatContainer({
             );
           })}
 
-          {/* ─── Case C: Thinking Shimmer loader ───────────────── */}
+          {/* ─── Case C: Thinking Shimmer loader (Premium) ──────── */}
           <AnimatePresence>
             {thinkingState === 'thinking' && (
               <motion.div 
-                initial={{ opacity: 0, y: 12, filter: 'blur(4px)' }}
-                animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-                exit={{ opacity: 0, y: -4, filter: 'blur(4px)' }}
-                transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
-                className="flex gap-4 justify-start text-zinc-400"
+                initial={{ opacity: 0, y: 16, filter: 'blur(6px)', scale: 0.97 }}
+                animate={{ opacity: 1, y: 0, filter: 'blur(0px)', scale: 1 }}
+                exit={{ opacity: 0, y: -6, filter: 'blur(6px)', scale: 0.97 }}
+                transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+                className="flex gap-4 justify-start"
               >
-                <div className="w-8 h-8 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center shrink-0">
-                  <Sparkles className="w-4 h-4 text-zinc-500 animate-spin" />
+                {/* Animated Avatar with pulsing glow */}
+                <div className="relative shrink-0">
+                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-zinc-900 to-zinc-950 border border-zinc-800 flex items-center justify-center relative z-10 agent-working-glow">
+                    <Sparkles className="w-4 h-4 text-purple-400/90" />
+                  </div>
+                  <div className="absolute -inset-1 rounded-lg bg-purple-500/10 blur-sm agent-working-glow" />
                 </div>
                 
-                <div className="flex-1 max-w-md bg-[#0d0d11]/40 border border-zinc-900 rounded-xl p-4 space-y-2">
-                  <div className="text-xs font-semibold text-zinc-450">
-                    <span className="text-shimmer">Core parsing workspace parameters...</span>
+                {/* Shimmer Card */}
+                <motion.div 
+                  className="flex-1 max-w-md rounded-xl p-4 space-y-3 agent-working-shimmer agent-working-border border"
+                  style={{ borderColor: 'rgba(168, 85, 247, 0.2)' }}
+                >
+                  {/* Header row: icon + animated dots */}
+                  <div className="flex items-center gap-2.5">
+                    <div className="flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-purple-400/80 agent-dot" />
+                      <span className="w-1.5 h-1.5 rounded-full bg-purple-400/80 agent-dot" />
+                      <span className="w-1.5 h-1.5 rounded-full bg-purple-400/80 agent-dot" />
+                    </div>
+                    <span className="text-[10px] font-mono font-semibold text-purple-300/70 tracking-wider uppercase">
+                      Agent working
+                    </span>
                   </div>
-                  <div className="h-2 bg-zinc-900 rounded w-11/12 animate-pulse" />
-                  <div className="h-2 bg-zinc-900 rounded w-8/12 animate-pulse" />
-                </div>
+
+                  {/* Shimmer text line */}
+                  <div className="relative overflow-hidden">
+                    <div className="h-3 bg-gradient-to-r from-white/5 via-white/10 to-white/5 rounded-full w-3/4 animate-shimmer-fast" />
+                  </div>
+                  <div className="relative overflow-hidden">
+                    <div className="h-3 bg-gradient-to-r from-white/5 via-white/10 to-white/5 rounded-full w-1/2 animate-shimmer-fast" />
+                  </div>
+                </motion.div>
               </motion.div>
             )}
           </AnimatePresence>
