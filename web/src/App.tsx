@@ -429,6 +429,7 @@ export default function App() {
           setThinkingState('idle');
           refreshStatus();
           refreshSessions();
+          saveCurrentSession([...(sessionMessages[currentSession] || []), assistantMsg]);
           triggerNotification('Response received');
         },
         (error) => {
@@ -770,6 +771,15 @@ export default function App() {
           </div>
 
         </section>
+
+        {/* 4. AUTOPILOT PANEL (bottom right panel) */}
+        <div className="w-64 shrink-0 border-l border-[#141418]/60 bg-[#070709] flex flex-col">
+          <AutopilotPanel
+            onStart={handleAutopilotStart}
+            onStop={handleAutopilotStop}
+            currentCwd={currentCwd}
+          />
+        </div>
 
         {/* 3. RIGHT SHEET SYSTEM */}
         <AnimatePresence>
