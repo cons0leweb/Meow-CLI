@@ -164,6 +164,11 @@ export default function App() {
     }
   };
 
+  const triggerNotification = useCallback((msg: string) => {
+    setShowNotification(msg);
+    setTimeout(() => setShowNotification(null), 3500);
+  }, []);
+  
   const refreshStatus = useCallback(async () => {
     try {
       const [s, cfg, cst] = await Promise.all([
@@ -205,10 +210,7 @@ export default function App() {
   }, [cwdInput, triggerNotification]);
 
   // Trigger notification
-  const triggerNotification = useCallback((msg: string) => {
-    setShowNotification(msg);
-    setTimeout(() => setShowNotification(null), 3500);
-  }, []);
+  
 
   // Autopilot handlers
   const handleAutopilotStart = useCallback(async (task: string, model?: string) => {

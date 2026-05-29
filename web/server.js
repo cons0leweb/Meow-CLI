@@ -489,6 +489,28 @@ app.post('/api/chat/stream', async (req, res) => {
           if (result.usage) usage = result.usage;
         }
         
+        // ─── FIX: If no text content but there are tool calls, generate fallback ───
+        if (!fullContent && toolCalls && toolCalls.length > 0) {
+          const toolDescriptions = toolCalls.map(tc => {
+            const name = tc.function?.name || tc.name || 'unknown';
+            let args = '';
+            try {
+              const parsed = typeof tc.function?.arguments === 'string' 
+                ? JSON.parse(tc.function.arguments) 
+                : (tc.function?.arguments || tc.input || {});
+              args = JSON.stringify(parsed, null, 2);
+            } catch {
+              args = String(tc.function?.arguments || '');
+            }
+            return `🔧 **${name}**\n\`\`\`json\n${args}\n\`\`\``;
+          }).join('\n\n');
+          
+          fullContent = `⚡ **AI вызвал инструменты для выполнения задачи:**\n\n${toolDescriptions}\n\n_Ожидайте результат выполнения..._`;
+          
+          // Also send the generated content as a regular chunk so the client streams it
+          res.write(`data: ${JSON.stringify({ type: 'content', content: fullContent })}\n\n`);
+        }
+        
         // Record cost
         if (costTracker && usage) {
           costTracker.record(usage, effectiveModel);
