@@ -90,49 +90,15 @@ export function Sidebar({
             </div>
           </div>
 
-          {/* Projects */}
+          {/* Working Directory */}
           <div className="space-y-1">
             <div className="text-[9px] uppercase font-bold tracking-widest text-[#4f4f5a] mb-2 px-1">
-              Projects
+              Working Directory
             </div>
-            <div className="space-y-0.5">
-              <motion.div 
-                whileHover={{ x: 2 }}
-                className="text-zinc-400 hover:text-zinc-200 text-xs px-3 py-1.5 rounded-lg flex items-center gap-2.5 cursor-pointer transition"
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-zinc-650" />
-                <span>Core Daemon</span>
-              </motion.div>
-              <motion.div 
-                whileHover={{ x: 2 }}
-                className="text-zinc-400 hover:text-zinc-200 text-xs px-3 py-1.5 rounded-lg flex items-center gap-2.5 cursor-pointer transition"
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-zinc-650" />
-                <span>Mobile Interface</span>
-              </motion.div>
-            </div>
-          </div>
-
-          {/* Assistants */}
-          <div className="space-y-1">
-            <div className="text-[9px] uppercase font-bold tracking-widest text-[#4f4f5a] mb-2 px-1">
-              Assistants
-            </div>
-            <div className="space-y-0.5">
-              <motion.div 
-                whileHover={{ x: 2 }}
-                className="text-zinc-400 hover:text-zinc-200 text-xs px-3 py-1.5 rounded-lg flex items-center gap-2.5 cursor-pointer transition"
-              >
-                <span className="text-sm">🤖</span>
-                <span>Autopilot Architect</span>
-              </motion.div>
-              <motion.div 
-                whileHover={{ x: 2 }}
-                className="text-zinc-400 hover:text-zinc-200 text-xs px-3 py-1.5 rounded-lg flex items-center gap-2.5 cursor-pointer transition"
-              >
-                <span className="text-sm">⚙</span>
-                <span>Spec Validator</span>
-              </motion.div>
+            <div className="text-zinc-400 text-xs px-3 py-1.5 rounded-lg">
+              <span className="font-mono text-[10px] text-zinc-500 truncate block">
+                {process.cwd() || '/home/cons0leweb/JS/meow-cli'}
+              </span>
             </div>
           </div>
 
