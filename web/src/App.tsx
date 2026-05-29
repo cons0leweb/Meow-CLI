@@ -663,12 +663,14 @@ export default function App() {
                                   transition={{ delay: idx * 0.04, duration: 0.35 }}
                                   className="flex items-center gap-2 text-xs py-0.5 pl-1 text-zinc-400"
                                 >
-                                  {step.status === 'running' ? (
+                                  {step.status === 'active' ? (
+                                    <div className="w-3.5 h-3.5 rounded-full bg-amber-500 animate-pulse shrink-0" />
+                                  ) : step.status === 'running' ? (
                                     <Check className="w-3.5 h-3.5 text-emerald-500" />
                                   ) : (
                                     <div className="w-3.5 h-3.5 rounded-full border border-zinc-700 shrink-0" />
                                   )}
-                                  <span className={step.status === 'running' ? 'line-through text-zinc-650 font-normal' : 'text-zinc-300 font-medium'}>
+                                  <span className={step.status === 'running' ? 'text-emerald-400 font-medium' : 'text-zinc-300 font-medium'}>
                                     {step.label}
                                   </span>
                                 </motion.div>
