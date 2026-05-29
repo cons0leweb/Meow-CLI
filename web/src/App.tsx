@@ -569,12 +569,14 @@ export default function App() {
                                       
                                       <button 
                                         onClick={() => {
-                                          const details = actionDetailMap[act.sheetKey];
-                                          if (details) {
-                                            setSelectedActionDetail(details);
-                                            setActiveSheet('action-detail');
-                                            triggerNotification(`Pulled ${act.title} detail log representation`);
-                                          }
+                                          setSelectedActionDetail({
+                                            title: act.title,
+                                            summary: [`Action: ${act.title}`],
+                                            files: [],
+                                            tools: []
+                                          });
+                                          setActiveSheet('action-detail');
+                                          triggerNotification(`Pulled ${act.title} detail log representation`);
                                         }}
                                         className="text-zinc-500 hover:text-amber-500 flex items-center gap-0.5 transition cursor-pointer"
                                       >
