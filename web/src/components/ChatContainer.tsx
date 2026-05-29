@@ -171,7 +171,6 @@ export function ChatContainer({
   workedExpandedId,
   onSetWorkedExpandedId,
   onInspectAction,
-  preConfiguredPlanSteps
 }: ChatContainerProps) {
   const containerEndRef = useRef<HTMLDivElement>(null);
 
