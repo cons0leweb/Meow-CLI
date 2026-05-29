@@ -240,6 +240,7 @@ export default function App() {
     // Stream response from real API
     let responseContent = '';
     const assistantId = `m-asst-${Date.now()}`;
+    const msgSessionId = currentSession;
 
     createChatStream(
       apiMessages,
@@ -248,16 +249,16 @@ export default function App() {
         responseContent += chunk;
         setThinkingState('streaming');
         setThreads(prev => {
-          const msgs = prev[currentSession] || [];
+          const msgs = prev[msgSessionId] || [];
           const existingIdx = msgs.findIndex(m => m.id === assistantId);
           if (existingIdx >= 0) {
             const updated = [...msgs];
             updated[existingIdx] = { ...updated[existingIdx], content: responseContent };
-            return { ...prev, [currentSession]: updated };
+            return { ...prev, [msgSessionId]: updated };
           }
           return {
             ...prev,
-            [currentSession]: [...msgs, {
+            [msgSessionId]: [...msgs, {
               id: assistantId,
               role: 'assistant',
               content: responseContent,
@@ -274,8 +275,8 @@ export default function App() {
           { role: 'user', content: typedMsg },
           { role: 'assistant', content: result.content }
         ];
-        if (currentSession) {
-          api.saveSession(currentSession, { messages: finalMessages }).catch(() => {});
+        if (msgSessionId) {
+          api.saveSession(msgSessionId, { messages: finalMessages }).catch(() => {});
         }
         triggerNotification("Response received completely.");
       },
@@ -283,7 +284,7 @@ export default function App() {
         setThinkingState('idle');
         setThreads(prev => ({
           ...prev,
-          [currentSession]: [...(prev[currentSession] || []), {
+          [msgSessionId]: [...(prev[msgSessionId] || []), {
             id: `m-err-${Date.now()}`,
             role: 'assistant',
             content: `Error: ${error}`,
@@ -291,6 +292,22 @@ export default function App() {
           }]
         }));
         triggerNotification(`Error: ${error}`);
+      },
+      // ─── onToolCall: render beautiful ActivityTimeline items ───
+      (toolCall) => {
+        setThinkingState('streaming');
+        
+        // Mark previous tool calls as 'success' (completed)
+        setToolActivityItems(prev => {
+          const updated = prev.map(item => 
+            item.status === 'running' 
+              ? { ...item, status: 'success' as ActivityStatus }
+              : item
+          );
+          // Add new tool call as 'running'
+          const newItem = toolCallToActivityItem(toolCall, 'running');
+          return [...updated, newItem];
+        });
       }
     );
   };
