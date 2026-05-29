@@ -382,7 +382,7 @@ export default function App() {
           workedExpandedId={workedExpandedId}
           onSetWorkedExpandedId={setWorkedExpandedId}
           onInspectAction={handleInspectAction}
-          preConfiguredPlanSteps={[]}
+          onInspectAction={handleInspectAction}
         />
 
         {/* Right Drawer */}
