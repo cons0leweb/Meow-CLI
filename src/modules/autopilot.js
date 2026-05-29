@@ -545,8 +545,6 @@ class Autopilot {
       `${MUTED}Auto-confirm:${C.reset} ${SUCCESS}ON${C.reset}`,
       ``,
       `${TEXT_DIM}Press ${C.bold}Ctrl+C${C.reset}${TEXT_DIM} to stop gracefully${C.reset}`,
-      ``,
-
     ];
     console.log(box(lines.join("\n"), { title: "🤖 AUTOPILOT", color: AUTO_CLR, width: Math.min(COLS - 2, 65) }));
     console.log("");
