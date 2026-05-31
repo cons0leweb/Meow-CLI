@@ -844,7 +844,7 @@ async function callApiStream(messages, cfg, onChunk) {
   // For non-OpenAI schemas, fall back to non-streaming but call chunks as we get them
   if (schema !== API_SCHEMA.OPENAI) {
     // For Claude/Gemini streaming, use the unified stream parser
-    let fullMessage = { role: "assistant", content: "", tool_calls: [] };
+    let fullMessage = { role: "assistant", content: "" };
     let usage = null;
     const toolCallMap = {};
     
