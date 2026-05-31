@@ -309,7 +309,23 @@ const handleInit = async (ctx, input) => {
   console.log(`    ${TEXT_DIM("• Reference project.meow in prompts: \"see project.meow for architecture\"")}${C.reset}`);
   console.log(`    ${TEXT_DIM("• Run /init --force to regenerate both files")}${C.reset}`);
   console.log(`    ${TEXT_DIM("• Use /context show to verify context is loaded")}${C.reset}`);
+  console.log(`    ${TEXT_DIM("• Run /index rebuild to create a file index for fast search")}${C.reset}`);
   console.log("");
+
+  // Auto-run index rebuild (in background, non-blocking for UX)
+  try {
+    const { rebuildIndex } = await import("../project-index.js");
+    console.log(`  ${MUTED}Auto-indexing project files...${C.reset}`);
+    const idxResult = await rebuildIndex(cwd);
+    if (idxResult.ok) {
+      console.log(`  ${TEXT_DIM}  ${idxResult.files} files indexed (${idxResult.elapsed})${C.reset}`);
+    }
+    console.log("");
+  } catch {
+    // Index module not available or failed — non-critical
+    console.log(`  ${TEXT_DIM}  (skip indexing — use /index rebuild manually)${C.reset}`);
+    console.log("");
+  }
 
   return { handled: true };
 };
