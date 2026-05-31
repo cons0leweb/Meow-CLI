@@ -135,6 +135,21 @@ const TOOLS = [
   {
     type: "function",
     function: {
+      name: "find_files",
+      description: "Search for files by name pattern. Fast, uses project index. Returns up to 20 matching file paths, sorted by modification time (most recent first).",
+      parameters: {
+        type: "object",
+        properties: {
+          pattern: { type: "string", description: "File name pattern (partial match, e.g. 'auth', 'test.js', 'api')" },
+          limit: { type: "number", description: "Max results (default 20, max 100)" }
+        },
+        required: ["pattern"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
       name: "grep_search",
       description: "Search for a pattern across files in a directory. Returns matching lines with file paths and line numbers.",
       parameters: {
