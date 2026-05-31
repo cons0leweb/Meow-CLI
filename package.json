@@ -1,10 +1,6 @@
 {
   "name": "meowcli",
-<<<<<<< HEAD
-  "version": "3.0.3",
-=======
   "version": "3.0.4",
->>>>>>> 1d1872f (update src/modules/autopilot-channel.js)
   "description": "Powerful terminal-based AI Agent with streaming, permissions, checkpoints, and autonomous mode",
   "main": "index.js",
   "type": "module",
