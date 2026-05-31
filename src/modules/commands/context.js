@@ -17,7 +17,7 @@ const handleContext = async (ctx, input) => {
   const cmd = parts[1] || "";
 
   if (!cmd || cmd === "show") {
-    printContext();
+    await printContext();
     return { handled: true };
   }
 
