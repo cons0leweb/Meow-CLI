@@ -247,6 +247,22 @@ function printContext() {
     }
   }
 
+  // Show index stats if available
+  try {
+    const { getIndexStats } = await import("./project-index.js");
+    const stats = await getIndexStats(process.cwd());
+    if (stats.exists) {
+      console.log(`  ${TEXT_DIM}Index:${C.reset} ${ACCENT(String(stats.fileCount))} ${TEXT_DIM}files, ${stats.dbSize}${C.reset}`);
+      if (stats.lastFullIndex) {
+        const diff = Math.floor(Date.now() / 1000) - parseInt(stats.lastFullIndex, 10);
+        const ago = diff < 3600 ? `${Math.floor(diff / 60)}m` : diff < 86400 ? `${Math.floor(diff / 3600)}h` : `${Math.floor(diff / 86400)}d`;
+        console.log(`  ${TEXT_DIM}Last index:${C.reset} ${MUTED}${ago} ago${C.reset}`);
+      }
+    }
+  } catch {
+    // Module not available — skip
+  }
+
   console.log(`  ${MUTED}${"─".repeat(50)}${C.reset}`);
   console.log(`  ${MUTED}CWD:${C.reset} ${TEXT_DIM}${process.cwd()}${C.reset}`);
   console.log("");
