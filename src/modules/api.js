@@ -349,8 +349,9 @@ function parseClaudeResponse(data) {
   const message = {
     role: "assistant",
     content: "",
-    tool_calls: [],
   };
+
+  const toolCalls = [];
 
   // Extract text content
   if (data.content && Array.isArray(data.content)) {
@@ -359,7 +360,7 @@ function parseClaudeResponse(data) {
         message.content += block.text || "";
       }
       if (block.type === "tool_use") {
-        message.tool_calls.push({
+        toolCalls.push({
           id: block.id,
           type: "function",
           function: {
@@ -370,6 +371,8 @@ function parseClaudeResponse(data) {
       }
     }
   }
+
+  if (toolCalls.length > 0) message.tool_calls = toolCalls;
 
   // Map stop_reason to finish_reason
   const finishReasonMap = {
