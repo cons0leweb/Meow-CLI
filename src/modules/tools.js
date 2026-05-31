@@ -1153,6 +1153,20 @@ async function executeTool(name, args, cfg, env = process.env) {
     case "copy_file": return await copyFile(args.from, args.to, cfg);
     case "delete_file": return await deleteFile(args.path, args.recursive, cfg);
     case "get_system_info": return getSystemInfo();
+    case "find_files": {
+      const { findFiles, indexExists } = await import("./project-index.js");
+      const { formatBytes, timeAgo } = await import("./utils.js");
+
+      if (!indexExists()) {
+        return "ℹ Index not found. Run /index rebuild first.";
+      }
+
+      const limit = Math.min(args.limit || 20, 100);
+      const results = await findFiles(args.pattern, { limit });
+
+      if (!results || results.length === 0) return "ℹ No matching files found.";
+      return results.map(f => `${f.path} (${formatBytes(f.size)}, ${timeAgo(f.mtime * 1000)})`).join("\n");
+    }
     case "grep_search": return grepSearch(args.pattern, args.path, args.include, args.max_results);
     case "run_shell": return await runShell(args.cmd, cfg, env);
     case "ask_user": return await askUser(args.question, cfg.auto_yes, args.default || "");
