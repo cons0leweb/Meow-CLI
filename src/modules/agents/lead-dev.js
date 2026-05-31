@@ -9,6 +9,12 @@ import { formatDuration } from "../utils.js";
 import { getMemoryStore } from "../memory/rag.js";
 import { DATA_DIR } from "../config.js";
 import { getSandbox } from "../security/sandbox.js";
+// Lazy-import for project index (may not be available, gracefully handled)
+let _indexModule = null;
+async function _getIndexModule() {
+  if (!_indexModule) { try { _indexModule = await import("../project-index.js"); } catch { _indexModule = {}; } }
+  return _indexModule;
+}
 
 const LEAD_LOG_DIR = path.join(DATA_DIR, "lead-dev-logs");
 
