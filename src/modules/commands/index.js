@@ -16,6 +16,7 @@ import { handleSessions } from "./sessions.js";
 import { handleCost } from "./cost.js";
 import { handleCompact } from "./compact.js";
 import { handleInit } from "./init.js";
+import { handleIndex, handleFind } from "./index-cmd.js";
 import { handleProvider } from "./provider.js";
 import { handleAuth } from "./auth.js";
 import { mcpHandler as handleMcp } from "./mcp.js";
