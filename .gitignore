@@ -38,6 +38,9 @@ Thumbs.db
 !.vscode/launch.json
 *.sublime-workspace
 
+# --- Project Index ---
+.meow/
+
 # --- Logs ---
 logs/
 *.log
