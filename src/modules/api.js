@@ -879,7 +879,8 @@ async function callApiStream(messages, cfg, onChunk) {
       if (chunk.type === "done") break;
     }
     
-    fullMessage.tool_calls = Object.values(toolCallMap).filter(Boolean);
+    const toolCalls = Object.values(toolCallMap).filter(Boolean);
+    if (toolCalls.length > 0) fullMessage.tool_calls = toolCalls;
     
     if (usage) {
       // Normalize usage
