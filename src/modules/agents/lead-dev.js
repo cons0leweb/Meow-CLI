@@ -329,7 +329,7 @@ class LeadDevSession {
     if (options.tasks) this.maxTasks = parseInt(options.tasks, 10);
 
     const origAutoYes = this.cfg.auto_yes;
-    this._printHeader(initialContext);
+    await this._printHeader(initialContext);
 
     try {
       let round = 0;
