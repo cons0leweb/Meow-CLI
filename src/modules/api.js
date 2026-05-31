@@ -925,15 +925,16 @@ async function callApiStream(messages, cfg, onChunk) {
         }
         if (delta.tool_calls) {
           for (const tc of delta.tool_calls) {
-            if (!fullMessage.tool_calls[tc.index]) fullMessage.tool_calls[tc.index] = { id: tc.id, type: "function", function: { name: "", arguments: "" } };
-            if (tc.function?.name) fullMessage.tool_calls[tc.index].function.name += tc.function.name;
-            if (tc.function?.arguments) fullMessage.tool_calls[tc.index].function.arguments += tc.function.arguments;
+            if (!toolCallsArr[tc.index]) toolCallsArr[tc.index] = { id: tc.id, type: "function", function: { name: "", arguments: "" } };
+            if (tc.function?.name) toolCallsArr[tc.index].function.name += tc.function.name;
+            if (tc.function?.arguments) toolCallsArr[tc.index].function.arguments += tc.function.arguments;
           }
         }
       } catch {}
     }
   }
-  fullMessage.tool_calls = fullMessage.tool_calls.filter(Boolean);
+  const filteredToolCalls = toolCallsArr.filter(Boolean);
+  if (filteredToolCalls.length > 0) fullMessage.tool_calls = filteredToolCalls;
   return { choices: [{ message: fullMessage }], usage };
 }
 
