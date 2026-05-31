@@ -26,6 +26,7 @@ import {
   handlePreview, handleCI, handleAudit, handleIncognito, handleRouting,
 } from "./v3.js";
 
+
 /**
  * Creates a command handler function from a list of command objects.
  * @param {Array<Object>} commands - List of command objects with name and execute.

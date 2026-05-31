@@ -202,6 +202,11 @@ function sanitizeToolCallsForApi(messages) {
     if (!msg?.tool_calls) return msg;
     const filtered = msg.tool_calls.filter(call => !missing.has(call?.id));
     if (filtered.length === msg.tool_calls.length) return msg;
+    if (filtered.length === 0) {
+      const rest = { ...msg };
+      delete rest.tool_calls;
+      return rest;
+    }
     const rest = { ...msg, tool_calls: filtered };
     return rest;
   });
