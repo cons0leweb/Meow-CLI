@@ -446,6 +446,8 @@ function parseGeminiResponse(data) {
     };
   }
 
+  if (toolCalls.length > 0) message.tool_calls = toolCalls;
+
   return {
     choices: [{
       message: message,
