@@ -402,8 +402,9 @@ function parseGeminiResponse(data) {
   const message = {
     role: "assistant",
     content: "",
-    tool_calls: [],
   };
+
+  const toolCalls = [];
 
   const candidate = data.candidates?.[0];
   if (candidate?.content?.parts) {
@@ -412,7 +413,7 @@ function parseGeminiResponse(data) {
         message.content += part.text;
       }
       if (part.functionCall) {
-        message.tool_calls.push({
+        toolCalls.push({
           id: `fc_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
           type: "function",
           function: {
