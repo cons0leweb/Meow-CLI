@@ -901,6 +901,7 @@ async function callApiStream(messages, cfg, onChunk) {
   const decoder = new TextDecoder();
   let buffer = "";
   let fullMessage = { role: "assistant", content: "" };
+  const toolCallsArr = [];
   let usage = null;
   while (true) {
     const { done, value } = await reader.read();
