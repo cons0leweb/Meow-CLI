@@ -479,17 +479,32 @@ class LeadDevSession {
     }
   }
 
-  _printHeader(context) {
+  async _printHeader(context) {
     const summary = this.analyzer.getSummary();
     const git = new GitAnalyzer();
     const hot = git.getHotFiles(3);
+
+    // Try to get index-based hot files
+    let indexInfo = "";
+    try {
+      const idx = await _getIndexModule();
+      if (idx.getIndexStats && idx.getRecentFiles) {
+        const stats = await idx.getIndexStats(process.cwd());
+        if (stats.exists && stats.fileCount > 0) {
+          const recent = await idx.getRecentFiles(3, process.cwd());
+          const hotFromIndex = recent.map(f => TEXT_DIM(f.path)).join(", ");
+          indexInfo = `${MUTED}Index:${C.reset} ${ACCENT(String(stats.fileCount))} ${MUTED}files ${hotFromIndex ? `· Hot: ${hotFromIndex}` : ""}`;
+        }
+      }
+    } catch { /* index not available */ }
 
     const lines = [
       `${ACCENT2}${C.bold}AI LEAD DEVELOPER v3.5${C.reset}`,
       "",
       `${MUTED}Project:${C.reset} ${TEXT}${this.analyzer.projectType}${C.reset}  ${MUTED}CWD:${C.reset} ${TEXT_DIM}${process.cwd()}${C.reset}`,
       `${MUTED}Gates:${C.reset} ${summary.test ? SUCCESS("test") : MUTED("test")} ${summary.lint ? SUCCESS("lint") : MUTED("lint")} ${summary.build ? SUCCESS("build") : MUTED("build")}`,
-      hot.length > 0 ? `${MUTED}Hot Files:${C.reset} ${hot.map(f => TEXT_DIM(f.file)).join(", ")}` : "",
+      hot.length > 0 ? `${MUTED}Git Hot Files:${C.reset} ${hot.map(f => TEXT_DIM(f.file)).join(", ")}` : "",
+      indexInfo,
       `${MUTED}Budget:${C.reset} $${this.maxCost} ${MUTED}Limit:${C.reset} ${this.maxTasks} tasks`,
       this.focusArea ? `${WARNING("Focus Area:")} ${TEXT(this.focusArea)}` : "",
       context ? `\n${MUTED}Initial Goal:${C.reset} ${TEXT(context)}` : "",
