@@ -17,6 +17,7 @@ export * from "./modules/plugins.js";
 export * from "./modules/permissions.js";
 export * from "./modules/trust.js";
 export * from "./modules/project-context.js";
+export * from "./modules/project-index.js";
 export * from "./modules/checkpoints.js";
 export * from "./modules/sessions.js";
 export * from "./modules/cost-tracker.js";
