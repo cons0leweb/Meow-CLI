@@ -208,7 +208,7 @@ function buildSystemPrompt(basePrompt, contextParts = null) {
 /**
  * Prints the current project context to the terminal.
  */
-function printContext() {
+async function printContext() {
   const parts = loadProjectContext();
 
   console.log("");
