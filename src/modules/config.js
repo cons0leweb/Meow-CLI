@@ -113,6 +113,8 @@ const DEFAULT_CONFIG = {
     "/trust": "/trust",
     "/opt": "/optimize",
     "/mcp": "/mcp",
+    "/ix": "/index",
+    "/f": "/find",
   },
   providers: {},
   mcp_servers: {},
