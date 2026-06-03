@@ -164,7 +164,7 @@ function saveAssistantProfile(name, system, temperature) {
  * @returns {Object} Complete configuration object.
  */
 function loadConfig() {
-  const cfg = loadJson(CONF_FILE, DEFAULT_CONFIG);
+  const cfg = isEncryptionActive() ? loadEncryptedConfig() : loadJson(CONF_FILE, DEFAULT_CONFIG);
   const assistantProfiles = loadAssistantsFromDir();
 
   const merged = {
