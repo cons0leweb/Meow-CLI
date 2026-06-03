@@ -1,7 +1,65 @@
 import fs from "fs";
 import path from "path";
 import { log } from "./ui.js";
-import { ASSIST_DIR, CONF_FILE, HIST_FILE, PIN_FILE, UNDO_FILE, LOG_DIR, LEGACY_CONF_FILE, LEGACY_HIST_FILE, LEGACY_LOG_DIR, DATA_DIR, DEFAULT_CONFIG, PLUGIN_DIR } from "./config.js";
+import { ASSIST_DIR, CONF_FILE, CONF_FILE_ENC, HIST_FILE, PIN_FILE, UNDO_FILE, LOG_DIR, LEGACY_CONF_FILE, LEGACY_HIST_FILE, LEGACY_LOG_DIR, DATA_DIR, DEFAULT_CONFIG, PLUGIN_DIR } from "./config.js";
+import { readPassword, encryptSync, decryptSync } from "./security/encryptor.js";
+
+/**
+ * Resolves the path to package.json (project root).
+ * @returns {string}
+ */
+function getPkgPath() {
+  const __filename = (import.meta?.url && new URL(import.meta.url).pathname) || "";
+  return path.resolve(path.dirname(__filename), "..", "..", "package.json");
+}
+
+/**
+ * Checks whether config encryption is active (.data marker exists + key available).
+ * @returns {boolean}
+ */
+function isEncryptionActive() {
+  const markerPath = path.join(DATA_DIR, ".data");
+  if (!fs.existsSync(markerPath)) return false;
+  const pwd = readPassword(getPkgPath());
+  return !!pwd;
+}
+
+/**
+ * Reads the encrypted config, or falls back to defaults.
+ * @returns {Object}
+ */
+function loadEncryptedConfig() {
+  const pwd = readPassword(getPkgPath());
+  if (!pwd || !fs.existsSync(CONF_FILE_ENC)) return { ...DEFAULT_CONFIG };
+  try {
+    const encBuf = fs.readFileSync(CONF_FILE_ENC);
+    const decBuf = decryptSync(encBuf, pwd);
+    return JSON.parse(decBuf.toString("utf8"));
+  } catch {
+    return { ...DEFAULT_CONFIG };
+  }
+}
+
+/**
+ * Saves config encrypted to .mc file. Ensures no plain .json is left behind.
+ * @param {Object} cfg
+ */
+function saveEncryptedConfig(cfg) {
+  const pwd = readPassword(getPkgPath());
+  if (!pwd) return;
+  try {
+    fs.mkdirSync(path.dirname(CONF_FILE_ENC), { recursive: true });
+    const data = Buffer.from(JSON.stringify(cfg, null, 2), "utf8");
+    const enc = encryptSync(data, pwd);
+    fs.writeFileSync(CONF_FILE_ENC, enc);
+    // Remove any stray plaintext config.json
+    if (fs.existsSync(CONF_FILE)) {
+      try { fs.unlinkSync(CONF_FILE); } catch {}
+    }
+  } catch (e) {
+    log.err(`Encrypted config save error: ${e.message}`);
+  }
+}
 
 /**
  * Loads and parses a JSON file.
