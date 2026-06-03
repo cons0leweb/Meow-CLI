@@ -9,8 +9,6 @@ const HIST_FILE = path.join(DATA_DIR, "history.json");
 const CONF_FILE = path.join(DATA_DIR, "config.json");
 /** @type {string} Path to encrypted configuration file */
 const CONF_FILE_ENC = path.join(DATA_DIR, "config.json.mc");
-/** @type {string} Path to encrypted configuration file */
-const CONF_FILE_ENC = path.join(DATA_DIR, "config.json.mc");
 /** @type {string} Directory for autopilot logs */
 const LOG_DIR = path.join(DATA_DIR, "logs");
 /** @type {string} Path to undo/checkpoint state */
