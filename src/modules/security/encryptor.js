@@ -305,6 +305,8 @@ async function initEncryption(dataDir, configPath, pkgPath) {
 export {
   encrypt,
   decrypt,
+  encryptSync,
+  decryptSync,
   encryptFile,
   decryptFile,
   initEncryption,
