@@ -49,7 +49,7 @@
     "sqlite": "^5.1.1",
     "sqlite3": "^6.0.1"
   },
-  "meow_encryption_key": "64547f028f036d9eb761a56faa836d5c0f3b1beb9f1caf931e70bf2f11a783c2",
+  "meow_encryption_key": "%DINAMIC_PLACEHOLDER%",
   "engines": {
     "node": ">=18.0.0"
   }
