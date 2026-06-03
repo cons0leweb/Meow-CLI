@@ -2,26 +2,15 @@ import fs from "fs";
 import path from "path";
 import { log } from "./ui.js";
 import { ASSIST_DIR, CONF_FILE, CONF_FILE_ENC, HIST_FILE, PIN_FILE, UNDO_FILE, LOG_DIR, LEGACY_CONF_FILE, LEGACY_HIST_FILE, LEGACY_LOG_DIR, DATA_DIR, DEFAULT_CONFIG, PLUGIN_DIR } from "./config.js";
-import { readPassword, encryptSync, decryptSync } from "./security/encryptor.js";
+import { readSeed, encryptSync, decryptSync } from "./security/encryptor.js";
 
 /**
- * Resolves the path to package.json (project root).
- * @returns {string}
- */
-function getPkgPath() {
-  const __filename = (import.meta?.url && new URL(import.meta.url).pathname) || "";
-  return path.resolve(path.dirname(__filename), "..", "..", "package.json");
-}
-
-/**
- * Checks whether config encryption is active (.data marker exists + key available).
+ * Checks whether config encryption is active (.data marker + valid seed).
  * @returns {boolean}
  */
 function isEncryptionActive() {
-  const markerPath = path.join(DATA_DIR, ".data");
-  if (!fs.existsSync(markerPath)) return false;
-  const pwd = readPassword(getPkgPath());
-  return !!pwd;
+  const seed = readSeed(DATA_DIR);
+  return seed !== null && seed.length > 0;
 }
 
 /**
@@ -29,11 +18,11 @@ function isEncryptionActive() {
  * @returns {Object}
  */
 function loadEncryptedConfig() {
-  const pwd = readPassword(getPkgPath());
-  if (!pwd || !fs.existsSync(CONF_FILE_ENC)) return { ...DEFAULT_CONFIG };
+  const seed = readSeed(DATA_DIR);
+  if (!seed || !fs.existsSync(CONF_FILE_ENC)) return { ...DEFAULT_CONFIG };
   try {
     const encBuf = fs.readFileSync(CONF_FILE_ENC);
-    const decBuf = decryptSync(encBuf, pwd);
+    const decBuf = decryptSync(encBuf, seed);
     return JSON.parse(decBuf.toString("utf8"));
   } catch {
     return { ...DEFAULT_CONFIG };
@@ -45,12 +34,12 @@ function loadEncryptedConfig() {
  * @param {Object} cfg
  */
 function saveEncryptedConfig(cfg) {
-  const pwd = readPassword(getPkgPath());
-  if (!pwd) return;
+  const seed = readSeed(DATA_DIR);
+  if (!seed) return;
   try {
     fs.mkdirSync(path.dirname(CONF_FILE_ENC), { recursive: true });
     const data = Buffer.from(JSON.stringify(cfg, null, 2), "utf8");
-    const enc = encryptSync(data, pwd);
+    const enc = encryptSync(data, seed);
     fs.writeFileSync(CONF_FILE_ENC, enc);
     // Remove any stray plaintext config.json
     if (fs.existsSync(CONF_FILE)) {
