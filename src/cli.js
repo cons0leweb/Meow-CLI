@@ -23,6 +23,8 @@ import { SessionManager } from "./modules/sessions.js";
 import { CostTracker } from "./modules/cost-tracker.js";
 import { shouldAutoCompact, compactMessages, printCompactResult, estimateTokens } from "./modules/compact.js";
 import { PromptOptimizer } from "./modules/smart/prompt-optimizer.js";
+import { initEncryption } from "./modules/security/encryptor.js";
+import { DATA_DIR, CONF_FILE } from "./modules/config.js";
 
 function parseArgs() {
   const args = process.argv.slice(2);
