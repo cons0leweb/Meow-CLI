@@ -13,8 +13,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Paths
-/** @type {string} Base directory for Meow CLI data */
-
+const PROJECT_ROOT = path.resolve(__dirname, "..", "..", "..");
 const PACKAGE_JSON_PATH = path.join(PROJECT_ROOT, "package.json");
 
 const MAGIC = Buffer.from("MEOW3");
