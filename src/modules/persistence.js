@@ -195,7 +195,12 @@ function saveConfig(cfg) {
   for (const name of Object.keys(assistantProfiles)) {
     delete cleanedProfiles[name];
   }
-  saveJson(CONF_FILE, { ...cfg, profiles: cleanedProfiles });
+  const cleanCfg = { ...cfg, profiles: cleanedProfiles };
+  if (isEncryptionActive()) {
+    saveEncryptedConfig(cleanCfg);
+  } else {
+    saveJson(CONF_FILE, cleanCfg);
+  }
 }
 
 /**
