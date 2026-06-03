@@ -7,14 +7,6 @@
 import crypto from "crypto";
 import fs from "fs";
 import path from "path";
-import { fileURLToPath } from "url";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// Paths
-const PROJECT_ROOT = path.resolve(__dirname, "..", "..", "..");
-const PACKAGE_JSON_PATH = path.join(PROJECT_ROOT, "package.json");
 
 const MAGIC = Buffer.from("MEOW3");
 const VERSION = 2;
@@ -26,13 +18,14 @@ const TAG_LEN = 16; // 128 bits = 16 bytes
 const PLACEHOLDER = "%DINAMIC_PLACEHOLDER%";
 
 /**
- * Read the encryption password from package.json.
- * If the placeholder is still present, returns null (meaning uninitialized).
+ * Read the encryption key from package.json.
+ * Returns null if placeholder is still present or file is missing.
+ * @param {string} pkgPath - Path to package.json
  * @returns {string|null}
  */
-function readPassword() {
+function readPassword(pkgPath) {
   try {
-    const pkg = JSON.parse(fs.readFileSync(PACKAGE_JSON_PATH, "utf8"));
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8"));
     const key = pkg.meow_encryption_key;
     if (!key || key === PLACEHOLDER) return null;
     return key;
@@ -52,11 +45,12 @@ function generateKey() {
 /**
  * Writes the encryption key into package.json, replacing the placeholder.
  * @param {string} key
+ * @param {string} pkgPath - Path to package.json
  */
-function storeKeyInPackageJson(key) {
-  const pkg = JSON.parse(fs.readFileSync(PACKAGE_JSON_PATH, "utf8"));
+function storeKeyInPackageJson(key, pkgPath) {
+  const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8"));
   pkg.meow_encryption_key = key;
-  fs.writeFileSync(PACKAGE_JSON_PATH, JSON.stringify(pkg, null, 2) + "\n", "utf8");
+  fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + "\n", "utf8");
 }
 
 /**
@@ -204,7 +198,7 @@ async function decryptFile(inputPath, password, outputPath) {
  * Initializes the encryption system. Called once at CLI startup.
  *
  * Flow:
- * 1. Check for .data marker file in DATA_DIR — if exists, just clean up .delete files.
+ * 1. Check for .data marker file in dataDir — if exists, just clean up .delete files.
  * 2. If .data does NOT exist:
  *    a. Generate random key → store in package.json (replacing %DINAMIC_PLACEHOLDER%)
  *    b. Encrypt config.json → config.json.mc
@@ -214,9 +208,10 @@ async function decryptFile(inputPath, password, outputPath) {
  *
  * @param {string} dataDir - Path to the data directory (e.g. ~/.meowcli/data/)
  * @param {string} configPath - Path to config.json
+ * @param {string} pkgPath - Path to package.json
  * @returns {Promise<string|null>} The password if initialized, or null if already done
  */
-async function initEncryption(dataDir, configPath) {
+async function initEncryption(dataDir, configPath, pkgPath) {
   const markerPath = path.join(dataDir, ".data");
   const deletePath = configPath + ".delete";
 
@@ -225,15 +220,14 @@ async function initEncryption(dataDir, configPath) {
     if (fs.existsSync(deletePath)) {
       try { fs.unlinkSync(deletePath); } catch {}
     }
-    const password = readPassword();
-    return password; // may be null if package.json was tampered with
+    return readPassword(pkgPath);
   }
 
   // --- First run: initialize ---
 
   // a. Generate key and store in package.json
   const key = generateKey();
-  storeKeyInPackageJson(key);
+  storeKeyInPackageJson(key, pkgPath);
 
   // b. Encrypt config.json (if it exists)
   if (fs.existsSync(configPath)) {
