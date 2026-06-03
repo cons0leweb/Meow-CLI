@@ -1,6 +1,6 @@
 /**
  * AssetEncryptor - AES-256-GCM file encryption/decryption.
- * ESM module. On first run, generates a random key, stores it in package.json,
+ * ESM module. On first run (optional), generates a random key, stores it in package.json,
  * encrypts the config file, validates it, and marks the plaintext for deletion.
  */
 
@@ -17,8 +17,28 @@ const TAG_LEN = 16; // 128 bits = 16 bytes
 
 const PLACEHOLDER = "%DINAMIC_PLACEHOLDER%";
 
+// Marker values for .data file
+const MARKER_ENABLED_PREFIX = "meow://rift/";
+const MARKER_DISABLED = "meow://veil/off";
+
 /**
- * Read the encryption key from package.json.
+ * Checks whether encryption is active (`.data` marker exists and is not "disabled").
+ * @param {string} dataDir - Path to the data directory
+ * @returns {boolean}
+ */
+function isEncryptionActive(dataDir) {
+  const markerPath = path.join(dataDir, ".data");
+  if (!fs.existsSync(markerPath)) return false;
+  try {
+    const content = fs.readFileSync(markerPath, "utf8").trim();
+    return content !== MARKER_DISABLED;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Read the encryption seed from package.json.
  * Returns null if placeholder is still present or file is missing.
  * @param {string} pkgPath - Path to package.json
  * @returns {string|null}
@@ -26,9 +46,9 @@ const PLACEHOLDER = "%DINAMIC_PLACEHOLDER%";
 function readPassword(pkgPath) {
   try {
     const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8"));
-    const key = pkg.meow_encryption_key;
-    if (!key || key === PLACEHOLDER) return null;
-    return key;
+    const seed = pkg.meow_seed;
+    if (!seed || seed === PLACEHOLDER) return null;
+    return seed;
   } catch {
     return null;
   }
@@ -43,13 +63,13 @@ function generateKey() {
 }
 
 /**
- * Writes the encryption key into package.json, replacing the placeholder.
- * @param {string} key
+ * Writes the encryption seed into package.json, replacing the placeholder.
+ * @param {string} seed
  * @param {string} pkgPath - Path to package.json
  */
-function storeKeyInPackageJson(key, pkgPath) {
+function storeKeyInPackageJson(seed, pkgPath) {
   const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8"));
-  pkg.meow_encryption_key = key;
+  pkg.meow_seed = seed;
   fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + "\n", "utf8");
 }
 
@@ -244,50 +264,98 @@ async function decryptFile(inputPath, password, outputPath) {
  * Initializes the encryption system. Called once at CLI startup.
  *
  * Flow:
- * 1. Check for .data marker file in dataDir — if exists, just clean up .delete files.
- * 2. If .data does NOT exist:
- *    a. Generate random key → store in package.json (replacing %DINAMIC_PLACEHOLDER%)
- *    b. Encrypt config.json → config.json.mc
- *    c. Decrypt config.json.mc → validate JSON
- *    d. Rename config.json → config.json.delete (for cleanup next run)
- *    e. Create .data marker file
+ * 1. Check for .data marker file in dataDir.
+ *    - If exists and enabled → clean up .delete files, return password.
+ *    - If exists and disabled → do nothing, return null.
+ * 2. If .data does NOT exist → prompt user (if interactive).
+ *    If user accepts:
+ *      a. Generate random seed → store in package.json (replacing %DINAMIC_PLACEHOLDER%)
+ *      b. Encrypt config.json → config.json.mc
+ *      c. Decrypt config.json.mc → validate JSON
+ *      d. Rename config.json → config.json.delete (for cleanup next run)
+ *      e. Create .data marker with one-way mystery hash (NOT the seed!)
+ *    If user declines:
+ *      f. Create .data marker with "disabled" sentinel
  *
  * @param {string} dataDir - Path to the data directory (e.g. ~/.meowcli/data/)
  * @param {string} configPath - Path to config.json
  * @param {string} pkgPath - Path to package.json
- * @returns {Promise<string|null>} The password if initialized, or null if already done
+ * @param {boolean} [interactive=false] - Whether to prompt the user
+ * @returns {Promise<string|null>} The seed if encryption is active, null otherwise
  */
-async function initEncryption(dataDir, configPath, pkgPath) {
+async function initEncryption(dataDir, configPath, pkgPath, interactive = false) {
   const markerPath = path.join(dataDir, ".data");
   const deletePath = configPath + ".delete";
+  const encryptedConfigPath = configPath + ".mc";
 
-  // Already initialized — just clean up .delete files from previous run
+  // --- Already initialized ---
   if (fs.existsSync(markerPath)) {
+    const content = fs.readFileSync(markerPath, "utf8").trim();
+
+    // Disabled — user opted out previously
+    if (content === MARKER_DISABLED) {
+      return null;
+    }
+
+    // Enabled — clean up .delete and stray plaintext from previous runs
     if (fs.existsSync(deletePath)) {
       try { fs.unlinkSync(deletePath); } catch {}
     }
+    // If someone recreated plaintext config.json (e.g. old code path), nuke it
+    if (fs.existsSync(configPath) && fs.existsSync(encryptedConfigPath)) {
+      try { fs.unlinkSync(configPath); } catch {}
+    }
+
     return readPassword(pkgPath);
   }
 
-  // --- First run: initialize ---
+  // --- First run: ask user (only if interactive) ---
+  let enableEncryption = false;
+  if (interactive) {
+    // Dynamic import of readline for prompting
+    const readline = await import("readline");
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout,
+    });
+    const answer = await new Promise((resolve) => {
+      rl.question("\n  🔐 Enable config file encryption? (encrypts API keys on disk) [Y/n] ", (ans) => {
+        rl.close();
+        resolve(ans.trim().toLowerCase());
+      });
+    });
+    enableEncryption = answer === "" || answer === "y" || answer === "yes";
+  } else {
+    // Non-interactive: skip encryption (don't auto-enable)
+    enableEncryption = false;
+  }
 
-  // a. Generate key and store in package.json
-  const key = generateKey();
-  storeKeyInPackageJson(key, pkgPath);
+  fs.mkdirSync(dataDir, { recursive: true });
+
+  if (!enableEncryption) {
+    // User declined — write disabled marker so we never ask again
+    fs.writeFileSync(markerPath, MARKER_DISABLED, "utf8");
+    return null;
+  }
+
+  // --- Enable encryption ---
+
+  // a. Generate seed and store in package.json
+  const seed = generateKey();
+  storeKeyInPackageJson(seed, pkgPath);
 
   // b. Encrypt config.json (if it exists)
   if (fs.existsSync(configPath)) {
-    const encryptedPath = configPath + ".mc";
-    await encryptFile(configPath, key, encryptedPath);
+    await encryptFile(configPath, seed, encryptedConfigPath);
 
     // c. Decrypt and validate JSON
-    const encryptedBuf = fs.readFileSync(encryptedPath);
-    const decryptedBuf = await decrypt(encryptedBuf, key);
+    const encryptedBuf = fs.readFileSync(encryptedConfigPath);
+    const decryptedBuf = await decrypt(encryptedBuf, seed);
     try {
       JSON.parse(decryptedBuf.toString("utf8"));
     } catch (e) {
       // Validation failed — clean up and throw
-      try { fs.unlinkSync(encryptedPath); } catch {}
+      try { fs.unlinkSync(encryptedConfigPath); } catch {}
       throw new Error(`Encryption validation failed: invalid JSON after decrypt — ${e.message}`);
     }
 
@@ -295,14 +363,13 @@ async function initEncryption(dataDir, configPath, pkgPath) {
     fs.renameSync(configPath, deletePath);
   }
 
-  // e. Create .data marker — stores a one-way mystery hash, NOT the key
-  fs.mkdirSync(dataDir, { recursive: true });
+  // e. Create .data marker — one-way mystery hash, NOT the seed
   const mystery = crypto.createHash("sha256")
-    .update("meow://rift/" + key + "/v3")
+    .update("meow://rift/" + seed + "/v3/sigil")
     .digest("hex");
   fs.writeFileSync(markerPath, mystery, "utf8");
 
-  return key;
+  return seed;
 }
 
 export {
@@ -313,6 +380,7 @@ export {
   encryptFile,
   decryptFile,
   initEncryption,
+  isEncryptionActive,
   readPassword,
   generateKey,
   MAGIC,
