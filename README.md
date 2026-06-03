@@ -49,10 +49,13 @@ Meow →  analyzes → splits into 8 sub-agents → executes in parallel → ret
 
 ```bash
 # Clone & enter
-git clone https://github.com/meowcli/meow-cli.git && cd meow-cli
+git clone https://github.com/cons0leweb/Meow-CLI.git && cd meow-cli
 
 # Install
 npm install
+
+# Global Acess (opt linux:sudo req)
+npm link
 
 # Launch
 node index.js
