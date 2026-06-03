@@ -87,7 +87,7 @@ async function main() {
 
   // --- Encryption init: first-run key generation, config encryption, cleanup ---
   try {
-    await initEncryption(DATA_DIR, CONF_FILE);
+    await initEncryption(DATA_DIR, CONF_FILE, PKG_PATH);
   } catch (e) {
     console.error(`Encryption init error: ${e.message}`);
   }
