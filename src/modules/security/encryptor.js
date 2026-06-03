@@ -166,6 +166,52 @@ async function decrypt(buffer, password) {
 }
 
 /**
+ * Synchronous version of encrypt() — uses pbkdf2Sync.
+ * For use in synchronous contexts like config loading.
+ * @param {Buffer|string} data
+ * @param {string} password
+ * @returns {Buffer}
+ */
+function encryptSync(data, password) {
+  const salt = crypto.randomBytes(SALT_LEN);
+  const iv = crypto.randomBytes(IV_LEN);
+  const key = crypto.pbkdf2Sync(password, salt, ITERATIONS, 32, "sha256");
+
+  const cipher = crypto.createCipheriv("aes-256-gcm", key, iv, { authTagLength: TAG_LEN });
+  const input = Buffer.isBuffer(data) ? data : Buffer.from(data, "utf8");
+  const header = buildHeader(salt, iv, ITERATIONS);
+  cipher.setAAD(header);
+
+  const encrypted = Buffer.concat([cipher.update(input), cipher.final()]);
+  const tag = cipher.getAuthTag();
+
+  return Buffer.concat([header, encrypted, tag]);
+}
+
+/**
+ * Synchronous version of decrypt() — uses pbkdf2Sync.
+ * For use in synchronous contexts like config loading.
+ * @param {Buffer} buffer - The full encrypted blob
+ * @param {string} password
+ * @returns {Buffer}
+ */
+function decryptSync(buffer, password) {
+  const { salt, iv, iterations, dataOffset } = parseHeader(buffer);
+  const key = crypto.pbkdf2Sync(password, salt, iterations, 32, "sha256");
+  const header = buildHeader(salt, iv, iterations);
+
+  const tagStart = buffer.length - TAG_LEN;
+  const encrypted = buffer.subarray(dataOffset, tagStart);
+  const tag = buffer.subarray(tagStart);
+
+  const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv, { authTagLength: TAG_LEN });
+  decipher.setAAD(header);
+  decipher.setAuthTag(tag);
+
+  return Buffer.concat([decipher.update(encrypted), decipher.final()]);
+}
+
+/**
  * Encrypts a file on disk. Output written to outputPath (default: inputPath + '.mc').
  * @param {string} inputPath
  * @param {string} password
