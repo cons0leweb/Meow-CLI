@@ -88,6 +88,13 @@ async function main() {
   // --- Encryption init: first-run key generation, config encryption, cleanup ---
   try {
     await initEncryption(DATA_DIR, CONF_FILE, PKG_PATH);
+    // If encryption is active, nuke any stray plaintext config.json
+    // (it may have been recreated by a previous run that didn't have this protection)
+    const fs = await import("fs");
+    const markerPath = path.join(DATA_DIR, ".data");
+    if (fs.existsSync(markerPath) && fs.existsSync(CONF_FILE)) {
+      try { fs.unlinkSync(CONF_FILE); } catch {}
+    }
   } catch (e) {
     console.error(`Encryption init error: ${e.message}`);
   }
