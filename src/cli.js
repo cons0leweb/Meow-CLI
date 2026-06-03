@@ -25,12 +25,6 @@ import { shouldAutoCompact, compactMessages, printCompactResult, estimateTokens 
 import { PromptOptimizer } from "./modules/smart/prompt-optimizer.js";
 import { initEncryption } from "./modules/security/encryptor.js";
 import { DATA_DIR, CONF_FILE } from "./modules/config.js";
-import { fileURLToPath } from "url";
-import path from "path";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const PKG_PATH = path.resolve(__dirname, "..", "package.json");
 
 function parseArgs() {
   const args = process.argv.slice(2);
