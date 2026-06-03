@@ -79,16 +79,9 @@ async function main() {
   const opts = parseArgs();
   if (opts.pipe) return runPipeMode(opts);
 
-  // --- Encryption init: first-run prompt, key generation, config encryption, cleanup ---
+  // --- Encryption init: first-run prompt, config encryption, cleanup ---
   try {
-    const fs = await import("fs");
-    await initEncryption(DATA_DIR, CONF_FILE, PKG_PATH, true);
-    // If encryption is active, nuke any stray plaintext config.json
-    // (it may have been recreated by a previous run that didn't have this protection)
-    const { isEncryptionActive } = await import("./modules/security/encryptor.js");
-    if (isEncryptionActive(DATA_DIR) && fs.existsSync(CONF_FILE)) {
-      try { fs.unlinkSync(CONF_FILE); } catch {}
-    }
+    await initEncryption(DATA_DIR, CONF_FILE, true);
   } catch (e) {
     console.error(`Encryption init error: ${e.message}`);
   }
