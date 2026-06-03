@@ -83,7 +83,7 @@ function deriveKey(password, salt, iterations) {
  * @returns {Buffer}
  */
 function buildHeader(salt, iv, iterations) {
-  const header = Buffer.alloc(5 + 4 + 1 + 1 + SALT_LEN + IV_LEN);
+  const header = Buffer.alloc(5 + 1 + 4 + 1 + 1 + SALT_LEN + IV_LEN);
   MAGIC.copy(header, 0);                    // 5 bytes magic
   header.writeUInt8(VERSION, 5);            // 1 byte version
   header.writeUInt32BE(iterations, 6);      // 4 bytes iterations
