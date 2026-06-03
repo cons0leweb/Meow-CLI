@@ -78,6 +78,14 @@ async function runPipeMode(opts) {
 async function main() {
   const opts = parseArgs();
   if (opts.pipe) return runPipeMode(opts);
+
+  // --- Encryption init: first-run key generation, config encryption, cleanup ---
+  try {
+    await initEncryption(DATA_DIR, CONF_FILE);
+  } catch (e) {
+    console.error(`Encryption init error: ${e.message}`);
+  }
+
   const ctx = createCliContext();
   registerSignalHandlers(ctx);
 
