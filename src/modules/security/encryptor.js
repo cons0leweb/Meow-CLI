@@ -295,9 +295,12 @@ async function initEncryption(dataDir, configPath, pkgPath) {
     fs.renameSync(configPath, deletePath);
   }
 
-  // e. Create .data marker
+  // e. Create .data marker — stores a one-way mystery hash, NOT the key
   fs.mkdirSync(dataDir, { recursive: true });
-  fs.writeFileSync(markerPath, key, "utf8");
+  const mystery = crypto.createHash("sha256")
+    .update("meow://rift/" + key + "/v3")
+    .digest("hex");
+  fs.writeFileSync(markerPath, mystery, "utf8");
 
   return key;
 }
