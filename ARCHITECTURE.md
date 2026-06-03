@@ -1,42 +1,44 @@
-# 🏗 Meow CLI Architecture Guide
+以下是您提供的 Meow CLI 架构指南的中文翻译：
 
-This document explains the internal structure and design philosophy of Meow CLI v3.
+# 🏗 Meow CLI 架构指南
 
-## 核心 (Core)
-The system is built as a single-loop orchestration engine that combines a streaming LLM interface with a rich set of local tools.
+本文档解释了 Meow CLI v3 的内部结构和设计理念。
 
-### 1. Main Loop (`src/cli.js`)
-The `main()` function in `cli.js` is the heart of the application. It handles:
-- Argument parsing and session resumption.
-- Interactive input via `askInput`.
-- Command routing (built-in vs. plugins).
-- The "Think-Act" loop where the LLM calls tools and receives results.
-- Auto-compaction of history when token limits are approached.
+## 核心
+该系统构建为一个单循环编排引擎，将流式 LLM 接口与丰富的本地工具集相结合。
 
-### 2. Module System
-Functionality is strictly modularized:
-- **`agents/`**: High-level orchestration for complex tasks (Sub-agents, Lead Dev).
-- **`memory/`**: The RAG system that persists project context.
-- **`security/`**: Sandbox validation and audit logging.
-- **`smart/`**: Intelligence layer for CI/CD and dynamic routing.
-- **`commands/`**: Handlers for all `/` slash commands.
+### 1. 主循环 (`src/cli.js`)
+`cli.js` 中的 `main()` 函数是整个应用的核心。它负责：
+- 参数解析和会话恢复。
+- 通过 `askInput` 进行交互式输入。
+- 命令路由（内置命令 vs. 插件）。
+- LLM 调用工具并接收结果的“思考-行动”循环。
+- 当接近令牌限制时自动压缩历史记录。
 
-## 🛠 Tool Execution Flow
-When the LLM decides to use a tool:
-1. **`api.js`**: Defines the tool schema sent to the model.
-2. **`tool-handler.js`**: Receives the call, validates it against the **Sandbox**, and checks **Permissions**.
-3. **`tools.js`**: Contains the actual implementation of low-level tools (fs, shell, git).
-4. **Result**: The output is returned to the LLM, which continues its reasoning.
+### 2. 模块系统
+功能严格模块化：
+- **`agents/`**：针对复杂任务（子代理、主导开发）的高级编排。
+- **`memory/`**：持久化项目上下文的 RAG 系统。
+- **`security/`**：沙箱验证和审计日志。
+- **`smart/`**：用于 CI/CD 和动态路由的智能层。
+- **`commands/`**：所有 `/` 斜杠命令的处理程序。
 
-## 🧠 Memory & Context
-Meow CLI uses a two-tier context system:
-1. **Static Context**: `MEOW.md` file in the project root is loaded at startup.
-2. **Dynamic Memory**: The RAG system (`rag.js`) automatically learns from tool outputs and user preferences, storing them in `~/.meowcli/data/memory/`.
+## 🛠 工具执行流程
+当 LLM 决定使用工具时：
+1. **`api.js`**：定义发送给模型的工具模式。
+2. **`tool-handler.js`**：接收调用，根据**沙箱**进行验证，并检查**权限**。
+3. **`tools.js`**：包含低级工具的实际实现（文件系统、Shell、Git）。
+4. **结果**：输出返回给 LLM，LLM 继续其推理。
 
-## 🔒 Security Model
-- **Sandbox**: All file operations are restricted to the Current Working Directory (CWD).
-- **Permissions**: Users can set tools to `allow`, `deny`, or `ask` (default).
-- **Audit Log**: Every tool execution is recorded with timestamps and arguments.
+## 🧠 记忆与上下文
+Meow CLI 使用两级上下文系统：
+1. **静态上下文**：项目根目录中的 `MEOW.md` 文件在启动时加载。
+2. **动态记忆**：RAG 系统 (`rag.js`) 自动从工具输出和用户偏好中学习，并将它们存储在 `~/.meowcli/data/memory/` 中。
 
-## 🚀 Parallelism
-Meow CLI can parallelize work using the `delegate_task` tool. This spawns independent "Sub-Agents" that run in parallel, each with its own token budget and toolset, reporting back to the main agent upon completion.
+## 🔒 安全模型
+- **沙箱**：所有文件操作都限制在当前工作目录内。
+- **权限**：用户可以将工具设置为 `allow`、`deny` 或 `ask`（默认）。
+- **审计日志**：每次工具执行都带有时间戳和参数记录。
+
+## 🚀 并行处理
+Meow CLI 可以使用 `delegate_task` 工具并行化工作。这会生成独立的“子代理”，这些子代理并行运行，每个都有自己的令牌预算和工具集，完成后向主代理报告。
