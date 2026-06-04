@@ -9,3 +9,4 @@ export * from "./utils.js";
 export * from "./autopilot.js";
 export * from "./screens.js";
 export * from "./plugins.js";
+export * from "./schema-loader.js";
