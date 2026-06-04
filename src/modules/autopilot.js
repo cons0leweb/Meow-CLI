@@ -12,6 +12,7 @@ import { executeTool, runShell } from "./tools.js";
 import { getTrustManager, TRUST_LEVEL } from "./trust.js";
 import { PromptOptimizer } from "./smart/prompt-optimizer.js";
 import { sanitizeToolCallsForApi } from "./images.js";
+import { compactWithAI, compactMessages } from "./compact.js";
 
 /** @type {Object} Autopilot execution phases */
 const PHASE = {
@@ -89,14 +90,16 @@ You MUST follow this EXACT sequence. No skipping.
  */
 class ContextManager {
   /**
+   * @param {Object} cfg - Application config (for AI-powered compression).
    * @param {number} [maxTokens=4000000] - Max tokens before compression.
    */
-  constructor(maxTokens = 4000000) {
+  constructor(cfg = {}, maxTokens = 4000000) {
     this.maxTokens = maxTokens;
     this.warningThreshold = 0.75;
     this.criticalThreshold = 0.90;
     this.estimatedTokens = 0;
     this.compressions = 0;
+    this.cfg = cfg;
   }
 
   /**
@@ -140,13 +143,29 @@ class ContextManager {
 
   /**
    * Compresses message history by summarizing old messages.
+   * Uses AI-powered compression when available, falls back to heuristic.
    * @param {Array<Object>} messages - History to compress.
    * @returns {Array<Object>} Compressed history.
    */
-  compress(messages) {
+  async compress(messages) {
     if (messages.length < 10) return messages;
     this.compressions++;
 
+    // Try AI-powered compression first (uses compactWithAI from compact.js)
+    if (this.cfg?.api_key) {
+      try {
+        const result = await compactWithAI(messages, this.cfg, 6);
+        if (result.compressed) {
+          this.estimatedTokens = result.after?.tokens || this.estimateTokens(result.messages);
+          log.dim(`Context: ~${result.before?.tokens?.toLocaleString() || "?"} → ~${this.estimatedTokens.toLocaleString()} tokens (AI summary)`);
+          return sanitizeToolCallsForApi(result.messages);
+        }
+      } catch {
+        // Fall through to heuristic compression
+      }
+    }
+
+    // Heuristic compression (original behavior)
     const systemMsg = messages[0];
     const recentCount = Math.min(12, Math.floor(messages.length * 0.3));
     const recentMessages = messages.slice(-recentCount);
@@ -169,7 +188,7 @@ class ContextManager {
     this.estimateTokens(compressed);
     log.dim(`Context: ~${oldTokens} → ~${this.estimatedTokens} tokens (${compressed.length} msgs)`);
 
-    return compressed;
+    return sanitizeToolCallsForApi(compressed);
   }
 
   /** @private */
@@ -312,6 +331,14 @@ class RecoveryStrategy {
     return /tool_calls.*must be followed|insufficient tool messages|tool_call_id/i.test(msg);
   }
 
+  /** @returns {boolean} True if the error is a retryable tool error (not a logic/validation error). */
+  isRetryableToolError(error) {
+    const msg = error.message || String(error);
+    if (/not found|ENOENT|EACCES|EISDIR|EPERM|EEXIST/i.test(msg)) return false;
+    if (/timeout|ECONNRESET|ECONNREFUSED|ETIMEDOUT|EAGAIN|EBUSY/i.test(msg)) return true;
+    return true;
+  }
+
   /** @returns {string} Recovery hint for the user/log. */
   getRecoveryHint(error) {
     const msg = error.message || String(error);
@@ -320,6 +347,9 @@ class RecoveryStrategy {
     if (/timeout/i.test(msg))               return "Timeout — retrying";
     if (/context.?length|token/i.test(msg)) return "Context overflow — compressing";
     if (this.isToolCallValidationError(error)) return "Broken tool call sequence — sanitizing";
+    if (/not found|ENOENT/i.test(msg))      return "File/resource not found — check path";
+    if (/EACCES|EPERM/i.test(msg))          return "Permission denied — access blocked";
+    if (/ENOSPC/i.test(msg))                return "No disk space — cannot write";
     return "Unknown error — recovering";
   }
 
@@ -353,6 +383,7 @@ function detectPhase(content) {
 
 /**
  * Executes a tool and tracks its impact.
+ * Uses WorkspaceSandbox for pre-execution validation.
  * @private
  */
 async function executeToolTracked(name, args, cfg, tracker, recovery, iteration) {
@@ -481,7 +512,7 @@ class Autopilot {
     this.currentPhase = PHASE.PLAN;
     this.planText = "";
 
-    this.contextManager = new ContextManager(cfg.autopilot?.max_context_tokens || 120000);
+    this.contextManager = new ContextManager(cfg, cfg.autopilot?.max_context_tokens || 120000);
     this.diffTracker = new DiffTracker();
     this.recovery = new RecoveryStrategy();
 
@@ -726,7 +757,7 @@ class Autopilot {
 
     this.diffTracker = new DiffTracker();
     this.recovery = new RecoveryStrategy();
-    this.contextManager = new ContextManager(this.cfg.autopilot?.max_context_tokens || 120000);
+    this.contextManager = new ContextManager(this.cfg, this.cfg.autopilot?.max_context_tokens || 120000);
 
     const optimizer = new PromptOptimizer(this.cfg);
     let finalTask = task;
