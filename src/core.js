@@ -25,3 +25,4 @@ export * from "./modules/compact.js";
 export * from "./modules/smart/prompt-optimizer.js";
 export * from "./modules/updater.js";
 export * from "./modules/theme.js";
+export * from "./modules/schema-loader.js";
