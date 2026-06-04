@@ -687,10 +687,11 @@ function applyCustomValues(cfg, requestOptions) {
   return { headers: mergedHeaders, body: mergedBody, url: finalUrl };
 }
 
-// RPM Limiter for NVIDIA NIM API
+// RPM Limiter for API rate limits (provider-agnostic)
 class RPMRateLimiter {
-  constructor(requestsPerMinute = 30) {
+  constructor(requestsPerMinute = 30, providerName = "unknown") {
     this.requestsPerMinute = requestsPerMinute;
+    this.providerName = providerName;
     this.queue = [];
     this.processing = false;
     this.requestTimes = [];
@@ -718,7 +719,7 @@ class RPMRateLimiter {
         const oldestRequest = this.requestTimes[0];
         const waitTime = 60000 - (now - oldestRequest) + 10; // Add 10ms buffer
         if (waitTime > 0) {
-          console.log(`[RPM Limiter] Rate limit reached (${this.requestsPerMinute} requests/min). Waiting ${Math.ceil(waitTime)}ms...`);
+          console.log(`[RPM Limiter:${this.providerName}] Rate limit reached (${this.requestsPerMinute} req/min). Waiting ${Math.ceil(waitTime)}ms...`);
           await new Promise(resolve => setTimeout(resolve, waitTime));
         }
         continue;
@@ -733,23 +734,32 @@ class RPMRateLimiter {
     this.processing = false;
   }
 
-  // Method to check if URL is NVIDIA NIM
-  static isNvidiaNim(url) {
-    return url && (url.includes('integrate.api.nvidia.com') || url.includes('nvcf.nvidia.com'));
+  // Provider-agnostic detection: any provider config can specify rpm_limit
+  static detectFromConfig(cfg) {
+    const providerId = cfg.active_provider;
+    const provider = providerId ? cfg.providers?.[providerId] : null;
+    const rpmLimit = provider?.rpm_limit || cfg.rpm_limit;
+    const providerName = provider?.name || providerId || "default";
+    if (rpmLimit && rpmLimit > 0) {
+      return { limit: rpmLimit, name: providerName };
+    }
+    return null;
   }
 }
 
-// Global rate limiter instance (initialized when needed)
-let rateLimiter = null;
+// Map of per-provider rate limiters (avoids global singleton issues)
+const rateLimiters = new Map();
 
 function getRateLimiter(cfg) {
-  const url = cfg.api_base || '';
-  if (RPMRateLimiter.isNvidiaNim(url) && !rateLimiter) {
-    const rpmLimit = cfg.rpm_limit || 30; // Default 30 RPM for NVIDIA NIM
-    rateLimiter = new RPMRateLimiter(rpmLimit);
-    console.log(`[RPM Limiter] Initialized for NVIDIA NIM API with ${rpmLimit} requests/minute limit`);
+  const rpmConfig = RPMRateLimiter.detectFromConfig(cfg);
+  if (!rpmConfig) return null;
+  
+  const key = `${rpmConfig.name}:${rpmConfig.limit}`;
+  if (!rateLimiters.has(key)) {
+    rateLimiters.set(key, new RPMRateLimiter(rpmConfig.limit, rpmConfig.name));
+    console.log(`[RPM Limiter] Initialized for "${rpmConfig.name}" with ${rpmConfig.limit} requests/minute limit`);
   }
-  return rateLimiter;
+  return rateLimiters.get(key);
 }
 
 /**
