@@ -749,6 +749,10 @@ class Autopilot {
     }
 
     const origAutoYes = this.cfg.auto_yes;
+    if (!origAutoYes) {
+      log.warn("AUTOPILOT: Enabling auto-confirm (auto_yes=true) for autonomous execution");
+      log.warn("AUTOPILOT: Only use this if you trust the LLM completely");
+    }
     this.cfg.auto_yes = true;
 
     this._printHeader(task);

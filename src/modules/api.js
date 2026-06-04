@@ -57,13 +57,17 @@ function buildOpenAIRequest(messages, cfg, options, profile) {
     model: cfg.model,
     messages: messages,
     tools: options.skipTools ? undefined : [
-      ...ALL_TOOLS.map(t => ({ type: "function", function: t })),
+      ...ALL_TOOLS.map(t => ({ type: "function", function: t, strict: true })),
     ],
   };
   if (!options.skipTools) body.tool_choice = "auto";
   if (options.stream) body.stream = true;
   if (options.temperature !== undefined) body.temperature = options.temperature;
   else if (profile?.temperature !== undefined) body.temperature = profile.temperature;
+  // Force JSON mode — модель аккуратнее со всеми структурами, включая аргументы tool calls
+  if (profile?.json_mode !== false) {
+    body.response_format = { type: "json_object" };
+  }
 
   const headers = {
     "Content-Type": "application/json",
