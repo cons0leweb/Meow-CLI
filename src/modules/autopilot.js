@@ -356,6 +356,14 @@ function detectPhase(content) {
  * @private
  */
 async function executeToolTracked(name, args, cfg, tracker, recovery, iteration) {
+  // Sandbox validation before execution
+  const { getSandbox } = await import("./security/sandbox.js");
+  const sandbox = getSandbox();
+  const validation = sandbox.validate(name, args);
+  if (!validation.allowed) {
+    return `❌ Security: ${validation.reason}`;
+  }
+
   if ((name === "write_file" || name === "patch_file") && args.path) {
     tracker.snapshotFile(args.path);
   }
@@ -371,7 +379,7 @@ async function executeToolTracked(name, args, cfg, tracker, recovery, iteration)
     return result;
   } catch (e) {
     recovery.recordError(e, name, iteration);
-    if (recovery.shouldRetry(name)) {
+    if (recovery.shouldRetry(name) && recovery.isRetryableToolError(e)) {
       const backoff = recovery.getBackoffMs(name);
       log.warn(`${recovery.getRecoveryHint(e)} (retry in ${backoff / 1000}s)`);
       await new Promise(r => setTimeout(r, backoff));
