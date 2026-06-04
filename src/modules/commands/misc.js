@@ -8,7 +8,14 @@ import {
   log,
   renderTemplate,
   parseKv,
-  saveHistoryState
+  saveHistoryState,
+  getSchema,
+  getModule,
+  getMethod,
+  listModules,
+  listMethods,
+  getDefinition,
+  checkSchemaVersion
 } from "../../core.js";
 import { getSandbox } from "../security/sandbox.js";
 
