@@ -81,7 +81,9 @@ async function main() {
   const opts = parseArgs();
   if (opts.version) {
     const { getCurrentVersion } = await import("./modules/updater.js");
-    console.log(`v${getCurrentVersion()}`);
+    const ver = getCurrentVersion();
+    if (opts.json) console.log(JSON.stringify({ version: ver }));
+    else console.log(`v${ver}`);
     process.exit(0);
   }
   if (opts.pipe) return runPipeMode(opts);
