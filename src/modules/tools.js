@@ -770,7 +770,6 @@ async function patchFile(p, oldString, newString, cfg = {}) {
     fs.writeFileSync(file, patched, "utf8");
 
     const lineNum = original.slice(0, index).split("\n").length;
-    autoGitCommit(`patch ${desc}`, cfg);
 
     return success(`✅ Patched: ${desc} (line ~${lineNum}, ${oldString.split("\n").length} lines → ${newString.split("\n").length} lines)`, null, {
       changedFiles: [file],
