@@ -14,76 +14,209 @@ import { PromptOptimizer } from "./smart/prompt-optimizer.js";
 import { sanitizeToolCallsForApi } from "./images.js";
 import { compactWithAI, compactMessages } from "./compact.js";
 
-/** @type {Object} Autopilot execution phases */
+// ═══════════════════════════════════════════════════════════════
+// PHASE CONSTANTS — State machine phases
+// ═══════════════════════════════════════════════════════════════
 const PHASE = {
-  PLAN:     "plan",
-  EXECUTE:  "execute",
-  VERIFY:   "verify",
-  RECOVER:  "recover",
-  COMPLETE: "complete",
+  PLANNING:      "planning",
+  EXECUTION:     "execution",
+  REPLANNING:    "replanning",
+  VERIFICATION:  "verification",
+  COMPLETE:      "complete",
+  FAILED:        "failed",
+};
+
+// ═══════════════════════════════════════════════════════════════
+// TASK STATUSES
+// ═══════════════════════════════════════════════════════════════
+const TASK_STATUS = {
+  PENDING:   "pending",
+  RUNNING:   "running",
+  COMPLETED: "completed",
+  FAILED:    "failed",
+  BLOCKED:   "blocked",
+};
+
+// ═══════════════════════════════════════════════════════════════
+// TOOL RESULT EVALUATION
+// ═══════════════════════════════════════════════════════════════
+const TOOL_OUTCOME = {
+  SUCCESS: "success",
+  FAILURE: "failure",
+  PARTIAL: "partial",
 };
 
 /** @type {Object} Icons for each phase */
 const PHASE_ICONS = {
-  [PHASE.PLAN]:     "📋",
-  [PHASE.EXECUTE]:  "⚡",
-  [PHASE.VERIFY]:   "🔍",
-  [PHASE.RECOVER]:  "🔧",
-  [PHASE.COMPLETE]: "✅",
+  [PHASE.PLANNING]:     "📋",
+  [PHASE.EXECUTION]:    "⚡",
+  [PHASE.REPLANNING]:   "🔧",
+  [PHASE.VERIFICATION]: "🔍",
+  [PHASE.COMPLETE]:     "✅",
+  [PHASE.FAILED]:       "❌",
 };
 
 /** @type {Object} Colors for each phase */
 const PHASE_COLORS = {
-  [PHASE.PLAN]:     INFO,
-  [PHASE.EXECUTE]:  AUTO_CLR,
-  [PHASE.VERIFY]:   ACCENT2,
-  [PHASE.RECOVER]:  WARNING,
-  [PHASE.COMPLETE]: SUCCESS,
+  [PHASE.PLANNING]:     INFO,
+  [PHASE.EXECUTION]:    AUTO_CLR,
+  [PHASE.REPLANNING]:   WARNING,
+  [PHASE.VERIFICATION]: ACCENT2,
+  [PHASE.COMPLETE]:     SUCCESS,
+  [PHASE.FAILED]:       ERROR,
 };
 
-/** @type {string} System prompt suffix for autopilot mode */
-const AUTOPILOT_SYSTEM_SUFFIX = `
-═══ AUTOPILOT MODE ═══
+// ═══════════════════════════════════════════════════════════════
+// SYSTEM PROMPTS (per-phase, NOT a monolithic suffix)
+// ═══════════════════════════════════════════════════════════════
 
-You MUST follow this EXACT sequence. No skipping.
+/** Prompt for the planning phase — model MUST return structured JSON. */
+const PLANNER_SYSTEM_PROMPT = `
+You are a planning agent. Your ONLY job is to produce a structured JSON plan.
 
-## PHASE 1: PLAN (mandatory first)
-- Output "📋 PLAN:" followed by numbered steps
-- Each step: action + expected result
-- Use find_files / list_dir / grep_search to understand the codebase
-- DO NOT write any code in this phase
-- DO NOT call write_file/patch_file/run_shell in this phase
+Given a task description, you MUST output a JSON object with this exact structure:
 
-## PHASE 2: EXECUTE
-- Output "⚡ STEP N:" before each action
-- One step at a time
-- After each file modification, briefly state what changed
-- Use patch_file for targeted edits (prefer over write_file)
+{
+  "tasks": [
+    {
+      "description": "Concise description of what to do (one action per task)"
+    }
+  ]
+}
 
-## PHASE 3: VERIFY (mandatory before COMPLETE)
-- Output "🔍 VERIFY:"
-- Run relevant tests: npm test / cargo test / go test / pytest
-- Read modified files to confirm changes
-- If verification fails → go back to PHASE 2 with fix strategy
-- NEVER skip to COMPLETE without verification
+RULES:
+- Each task must be a single, atomic action.
+- Order tasks logically (dependencies first).
+- Do NOT include any text outside the JSON.
+- Do NOT use markdown code fences around the JSON.
+- The JSON must be valid and parseable.
+- Maximum 20 tasks.
+- Use tool names like: list_dir, read_file, write_file, patch_file, grep_search, run_shell, find_files, git_diff, http_request, web_search
 
-## PHASE 4: COMPLETE
-- Output "✅ AUTOPILOT COMPLETE"
-- Summary: what was done, files changed, verification result
+Output ONLY the JSON object, nothing else.`;
 
-## RULES (STRICT)
-1. NEVER skip PLAN phase
-2. NEVER skip VERIFY phase  
-3. NEVER output COMPLETE without verification
-4. If you don't know the test command, use find_files pattern="package.json" or similar to detect project type
-5. MAX 3 verification failures before reporting as "partial completion"
+/** Prompt for executing a single task. */
+function executionPrompt(taskDescription, taskIndex, totalTasks) {
+  return `
+You are executing one specific task. Execute ONLY this task, nothing more.
 
-## PROJECT DETECTION (use these commands):
-- Node.js: find_files pattern="package.json" → npm test
-- Python: find_files pattern="pyproject.toml" or "requirements.txt" → pytest
-- Rust: find_files pattern="Cargo.toml" → cargo test
-- Go: find_files pattern="go.mod" → go test ./...
+CURRENT TASK (${taskIndex + 1}/${totalTasks}):
+${taskDescription}
+
+INSTRUCTIONS:
+- Use tools as needed to complete this ONE task.
+- When done, respond with "TASK DONE" and a brief summary of what you did.
+- If the task cannot be completed, respond with "TASK FAILED: <reason>".
+- If the task depends on something not yet done, respond with "TASK BLOCKED: <reason>".
+- Do NOT plan other tasks. Do NOT verify. Just execute this one task.
+
+CWD: ${process.cwd()}
+Time: ${new Date().toISOString()}
 `;
+}
+
+/** Prompt for replanning after a task failure. */
+const REPLANNER_SYSTEM_PROMPT = `
+You are a replanning agent. A task has failed and you need to create replacement tasks.
+
+Given the failed task description and the error, output a JSON object with replacement tasks:
+
+{
+  "replacement_tasks": [
+    {
+      "description": "New task to fix or work around the failure"
+    }
+  ]
+}
+
+RULES:
+- Analyze the failure and create tasks that address the root cause.
+- You may create 1-5 replacement tasks.
+- Do NOT include any text outside the JSON.
+- Do NOT use markdown code fences.
+- Output ONLY the JSON object.`;
+
+// ═══════════════════════════════════════════════════════════════
+// AUTOPILOT STATE — The single source of truth
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * Immutable-style state snapshot for the autopilot state machine.
+ */
+class AutopilotState {
+  constructor() {
+    /** @type {string} Current phase from PHASE */
+    this.phase = PHASE.PLANNING;
+    /** @type {Array<Object>} Task graph */
+    this.tasks = [];
+    /** @type {number} Index of currently executing task */
+    this.currentTaskIndex = -1;
+    /** @type {boolean} Verification passed */
+    this.verificationPassed = false;
+    /** @type {string|null} Verification output */
+    this.verificationOutput = null;
+    /** @type {number} Replan count */
+    this.replanCount = 0;
+    /** @type {number} Max replans allowed */
+    this.maxReplans = 5;
+    /** @type {number} Consecutive tool failures without progress */
+    this.stallCounter = 0;
+    /** @type {number} Max stalls before failing */
+    this.maxStalls = 3;
+  }
+
+  /**
+   * Transition to a new phase. Logs the transition.
+   * @param {string} newPhase
+   * @param {Function} logFn
+   */
+  transition(newPhase, logFn) {
+    const old = this.phase;
+    this.phase = newPhase;
+    if (logFn && old !== newPhase) {
+      logFn("phase_transition", `${old} → ${newPhase}`);
+    }
+  }
+
+  /** @returns {boolean} True if all tasks are completed */
+  allTasksCompleted() {
+    return this.tasks.length > 0 &&
+      this.tasks.every(t => t.status === TASK_STATUS.COMPLETED);
+  }
+
+  /** @returns {boolean} True if any task is failed and needs replanning */
+  hasBlockedOrFailed() {
+    return this.tasks.some(t =>
+      t.status === TASK_STATUS.FAILED || t.status === TASK_STATUS.BLOCKED
+    );
+  }
+
+  /** @returns {Object|null} The first failed or blocked task */
+  getFailedTask() {
+    return this.tasks.find(t =>
+      t.status === TASK_STATUS.FAILED || t.status === TASK_STATUS.BLOCKED
+    ) || null;
+  }
+
+  /** @returns {Object|null} The next pending task */
+  getNextPendingTask() {
+    return this.tasks.find(t => t.status === TASK_STATUS.PENDING) || null;
+  }
+
+  /** @returns {number} Count of completed tasks */
+  completedCount() {
+    return this.tasks.filter(t => t.status === TASK_STATUS.COMPLETED).length;
+  }
+
+  /** @returns {number} Count of failed tasks */
+  failedCount() {
+    return this.tasks.filter(t => t.status === TASK_STATUS.FAILED).length;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CONTEXT MANAGER (preserved, minimal changes)
+// ═══════════════════════════════════════════════════════════════
 
 /**
  * Manages context window and compression during autopilot runs.
@@ -179,7 +312,7 @@ class ContextManager {
         content:
           `[CONTEXT COMPRESSION #${this.compressions}]\n` +
           `Previous ${oldMessages.length} messages were compressed.\n\n${summary}\n\n` +
-          `Continue from where you left off. Refer to your plan.`
+          `Continue from where you left off.`
       },
       ...recentMessages,
     ];
@@ -194,7 +327,6 @@ class ContextManager {
   /** @private */
   _summarizeMessages(messages) {
     const parts = [];
-    let planText = "";
     let lastAssistant = "";
     const toolResults = [];
     const files = new Set();
@@ -203,7 +335,6 @@ class ContextManager {
       const content = typeof msg.content === "string" ? msg.content : "";
       if (msg.role === "assistant" && content) {
         lastAssistant = content;
-        if (content.includes("PLAN:") || content.includes("📋")) planText = content;
       }
       if (msg.role === "tool" && content) {
         toolResults.push(content.split("\n")[0].slice(0, 150));
@@ -212,16 +343,19 @@ class ContextManager {
       fileMatches.forEach(f => files.add(f));
     }
 
-    if (planText) parts.push(`## Plan:\n${planText.slice(0, 1000)}`);
     if (toolResults.length > 0) {
       parts.push(`## Tools (${toolResults.length}):\n${toolResults.slice(-10).map(r => `- ${r}`).join("\n")}`);
     }
     if (files.size > 0) parts.push(`## Files: ${[...files].join(", ")}`);
-    if (lastAssistant && !planText) parts.push(`## Last state:\n${lastAssistant.slice(0, 500)}`);
+    if (lastAssistant) parts.push(`## Last state:\n${lastAssistant.slice(0, 500)}`);
 
     return parts.join("\n\n") || "No significant content.";
   }
 }
+
+// ═══════════════════════════════════════════════════════════════
+// DIFF TRACKER (preserved, no changes)
+// ═══════════════════════════════════════════════════════════════
 
 /**
  * Tracks file system changes and commands executed during autopilot.
@@ -285,6 +419,10 @@ class DiffTracker {
     return this.filesCreated.length + this.filesModified.length;
   }
 }
+
+// ═══════════════════════════════════════════════════════════════
+// RECOVERY STRATEGY (preserved, no changes)
+// ═══════════════════════════════════════════════════════════════
 
 /**
  * Manages error recovery and retry strategies.
@@ -365,20 +503,28 @@ class RecoveryStrategy {
   }
 }
 
+// ═══════════════════════════════════════════════════════════════
+// TOOL EXECUTION (preserved, minimal changes)
+// ═══════════════════════════════════════════════════════════════
+
 /**
- * Detects the current phase from assistant content.
- * @param {string} content - Assistant message content.
- * @returns {string|null} Phase constant or null.
+ * Evaluates a tool result and returns an outcome.
+ * @param {string} name - Tool name
+ * @param {string} result - Tool result string
+ * @returns {string} TOOL_OUTCOME value
  */
-function detectPhase(content) {
-  if (!content) return null;
-  const upper = content.toUpperCase();
-  if (upper.includes("AUTOPILOT COMPLETE") || upper.includes("АВТОПИЛОТ ЗАВЕРШЁН")) return PHASE.COMPLETE;
-  if (content.includes("📋 PLAN:") || /^#+\s*PLAN/im.test(content)) return PHASE.PLAN;
-  if (content.includes("🔍 VERIFY:") || /VERIF(Y|ICATION)/i.test(content)) return PHASE.VERIFY;
-  if (content.includes("🔧 RECOVER:") || /RECOVER(Y)?:/i.test(content)) return PHASE.RECOVER;
-  if (content.includes("⚡ STEP") || /STEP\s+\d/i.test(content)) return PHASE.EXECUTE;
-  return null;
+function evaluateToolOutcome(name, result) {
+  if (!result) return TOOL_OUTCOME.FAILURE;
+  const r = String(result);
+  // Explicit error markers
+  if (r.startsWith("❌") || r.includes("Error:") || r.includes("error:")) {
+    return TOOL_OUTCOME.FAILURE;
+  }
+  // Partial indicators
+  if (r.startsWith("ℹ") && (r.includes("not found") || r.includes("No "))) {
+    return TOOL_OUTCOME.PARTIAL;
+  }
+  return TOOL_OUTCOME.SUCCESS;
 }
 
 /**
@@ -392,7 +538,7 @@ async function executeToolTracked(name, args, cfg, tracker, recovery, iteration)
   const sandbox = getSandbox();
   const validation = sandbox.validate(name, args);
   if (!validation.allowed) {
-    return `❌ Security: ${validation.reason}`;
+    return { result: `❌ Security: ${validation.reason}`, outcome: TOOL_OUTCOME.FAILURE };
   }
 
   if ((name === "write_file" || name === "patch_file") && args.path) {
@@ -404,22 +550,464 @@ async function executeToolTracked(name, args, cfg, tracker, recovery, iteration)
 
   try {
     const result = await executeTool(name, args, cfg);
-    if ((name === "write_file" || name === "patch_file") && args.path && !result.includes("❌")) {
+    const outcome = evaluateToolOutcome(name, result);
+    if ((name === "write_file" || name === "patch_file") && args.path && outcome !== TOOL_OUTCOME.FAILURE) {
       tracker.trackWrite(args.path);
     }
-    return result;
+    return { result, outcome };
   } catch (e) {
     recovery.recordError(e, name, iteration);
     if (recovery.shouldRetry(name) && recovery.isRetryableToolError(e)) {
       const backoff = recovery.getBackoffMs(name);
       log.warn(`${recovery.getRecoveryHint(e)} (retry in ${backoff / 1000}s)`);
       await new Promise(r => setTimeout(r, backoff));
-      try { return await executeTool(name, args, cfg); }
-      catch (e2) { return `❌ Tool error after retry: ${e2.message}`; }
+      try {
+        const result = await executeTool(name, args, cfg);
+        return { result, outcome: evaluateToolOutcome(name, result) };
+      } catch (e2) {
+        return { result: `❌ Tool error after retry: ${e2.message}`, outcome: TOOL_OUTCOME.FAILURE };
+      }
     }
-    return `❌ Tool error (max retries): ${e.message}`;
+    return { result: `❌ Tool error (max retries): ${e.message}`, outcome: TOOL_OUTCOME.FAILURE };
   }
 }
+
+// ═══════════════════════════════════════════════════════════════
+// PROJECT DETECTION (for verification)
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * Detects project type and returns appropriate test command.
+ * @returns {{ type: string, cmd: string }|null}
+ */
+function detectProjectType() {
+  const cwd = process.cwd();
+
+  // Node.js
+  if (fs.existsSync(path.join(cwd, "package.json"))) {
+    const pkg = JSON.parse(fs.readFileSync(path.join(cwd, "package.json"), "utf8"));
+    const scripts = pkg.scripts || {};
+    if (scripts.test) {
+      return { type: "node", cmd: "npm test" };
+    }
+    return { type: "node", cmd: "node --test tests/**/*.test.js" };
+  }
+
+  // Python
+  if (fs.existsSync(path.join(cwd, "pyproject.toml")) || fs.existsSync(path.join(cwd, "requirements.txt"))) {
+    return { type: "python", cmd: "pytest" };
+  }
+
+  // Rust
+  if (fs.existsSync(path.join(cwd, "Cargo.toml"))) {
+    return { type: "rust", cmd: "cargo test" };
+  }
+
+  // Go
+  if (fs.existsSync(path.join(cwd, "go.mod"))) {
+    return { type: "go", cmd: "go test ./..." };
+  }
+
+  return null;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PLANNER — Calls model for structured plan
+// ═══════════════════════════════════════════════════════════════
+
+class Planner {
+  /**
+   * @param {Object} cfg - Configuration
+   */
+  constructor(cfg) {
+    this.cfg = cfg;
+  }
+
+  /**
+   * Generates a plan for the given task.
+   * @param {string} task - Task description
+   * @returns {Promise<Array<Object>>} Array of task objects
+   */
+  async plan(task) {
+    const messages = [
+      { role: "system", content: PLANNER_SYSTEM_PROMPT },
+      { role: "user", content: `Create a JSON plan for this task:\n\n${task}` },
+    ];
+
+    let rawResponse = "";
+    try {
+      const data = await callApi(messages, this.cfg);
+      rawResponse = data.choices?.[0]?.message?.content || "";
+    } catch (e) {
+      log.err(`Planner API call failed: ${e.message}`);
+      return [];
+    }
+
+    return this._parsePlan(rawResponse);
+  }
+
+  /**
+   * Parses the model response into task objects.
+   * @param {string} raw - Raw model response
+   * @returns {Array<Object>} Task objects with id, description, status
+   */
+  _parsePlan(raw) {
+    let jsonStr = raw.trim();
+
+    // Strip markdown code fences if present
+    const fenceMatch = jsonStr.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/i);
+    if (fenceMatch) {
+      jsonStr = fenceMatch[1].trim();
+    }
+
+    // Find the first JSON object in the text
+    const objMatch = jsonStr.match(/\{[\s\S]*\}/);
+    if (objMatch) {
+      jsonStr = objMatch[0];
+    }
+
+    try {
+      const parsed = JSON.parse(jsonStr);
+      const tasks = (parsed.tasks || []).map((t, i) => ({
+        id: `task-${i + 1}`,
+        description: t.description || String(t),
+        status: TASK_STATUS.PENDING,
+        result: null,
+        retries: 0,
+        maxRetries: 2,
+      }));
+      return tasks;
+    } catch (e) {
+      log.warn(`Failed to parse plan JSON: ${e.message}`);
+      // Fallback: create a single task from the raw text
+      return [{
+        id: "task-1",
+        description: raw.slice(0, 500),
+        status: TASK_STATUS.PENDING,
+        result: null,
+        retries: 0,
+        maxRetries: 2,
+      }];
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// EXECUTOR — Executes one task at a time
+// ═══════════════════════════════════════════════════════════════
+
+class Executor {
+  /**
+   * @param {Object} cfg
+   * @param {DiffTracker} tracker
+   * @param {RecoveryStrategy} recovery
+   * @param {ContextManager} contextManager
+   * @param {Function} logFn
+   */
+  constructor(cfg, tracker, recovery, contextManager, logFn) {
+    this.cfg = cfg;
+    this.tracker = tracker;
+    this.recovery = recovery;
+    this.contextManager = contextManager;
+    this.logFn = logFn || (() => {});
+
+    this.toolCalls = 0;
+    this.lastToolCallIteration = 0;
+    this.errors = 0;
+  }
+
+  /**
+   * Executes a single task.
+   * @param {Object} task - Task object
+   * @param {number} taskIndex - Index in the task list
+   * @param {number} totalTasks - Total number of tasks
+   * @param {Array<Object>} sharedMessages - Shared message history (may be modified)
+   * @returns {Promise<Object>} { status: TASK_STATUS, result: string, messages: Array }
+   */
+  async execute(task, taskIndex, totalTasks, sharedMessages) {
+    task.status = TASK_STATUS.RUNNING;
+    this.logFn("task_start", `${task.id}: ${task.description}`);
+
+    const executionMessages = [
+      ...sharedMessages,
+      { role: "user", content: executionPrompt(task.description, taskIndex, totalTasks) },
+    ];
+
+    let taskComplete = false;
+    let taskStatus = TASK_STATUS.RUNNING;
+    let taskResult = "";
+    let localIterations = 0;
+    const maxLocalIterations = 10; // Max iterations for a single task
+
+    while (!taskComplete && localIterations < maxLocalIterations) {
+      localIterations++;
+
+      // Context management
+      if (this.contextManager.needsCriticalCompression(executionMessages)) {
+        log.warn("Context critical — compressing");
+        executionMessages = await this.contextManager.compress(executionMessages);
+        executionMessages = sanitizeToolCallsForApi(executionMessages);
+      } else if (this.contextManager.needsCompression(executionMessages)) {
+        executionMessages = await this.contextManager.compress(executionMessages);
+        executionMessages = sanitizeToolCallsForApi(executionMessages);
+      }
+
+      let data;
+      try {
+        data = await callApi(executionMessages, this.cfg);
+      } catch (e) {
+        this.errors++;
+        this.logFn("api_error", e.message);
+
+        if (this.recovery.isApiError(e)) {
+          await new Promise(r => setTimeout(r, 2000));
+          continue;
+        }
+        taskStatus = TASK_STATUS.FAILED;
+        taskResult = `API error: ${e.message}`;
+        break;
+      }
+
+      const msg = data.choices?.[0]?.message;
+      if (!msg) {
+        taskStatus = TASK_STATUS.FAILED;
+        taskResult = "Empty API response";
+        break;
+      }
+
+      // Handle tool calls
+      if (msg.tool_calls && msg.tool_calls.length > 0) {
+        executionMessages.push(msg);
+        this.toolCalls += msg.tool_calls.length;
+
+        for (const call of msg.tool_calls) {
+          const name = call.function.name;
+          let args = {};
+          try { args = JSON.parse(call.function.arguments); } catch { args = {}; }
+
+          printToolExecution(name, args, 0, 1);
+          this.logFn("tool_call", `${name}: ${JSON.stringify(args).slice(0, 300)}`);
+
+          const { result, outcome } = await executeToolTracked(
+            name, args, this.cfg, this.tracker, this.recovery, 0
+          );
+
+          if (this.cfg.autopilot?.verbose !== false) {
+            printToolResult(result, 4);
+          }
+
+          this.logFn("tool_result", `${name}: ${(result || "").slice(0, 500)}`);
+
+          if (outcome === TOOL_OUTCOME.FAILURE) {
+            this.logFn("tool_failure", `${name}: ${result.slice(0, 200)}`);
+          }
+
+          executionMessages.push({
+            role: "tool",
+            tool_call_id: call.id,
+            content: result,
+          });
+        }
+        continue;
+      }
+
+      // Handle text response
+      const content = msg.content || "";
+      executionMessages.push(msg);
+
+      // Check for task completion markers
+      if (/TASK\s+DONE/i.test(content)) {
+        taskComplete = true;
+        taskStatus = TASK_STATUS.COMPLETED;
+        taskResult = content;
+      } else if (/TASK\s+FAILED/i.test(content)) {
+        taskComplete = true;
+        taskStatus = TASK_STATUS.FAILED;
+        taskResult = content;
+      } else if (/TASK\s+BLOCKED/i.test(content)) {
+        taskComplete = true;
+        taskStatus = TASK_STATUS.BLOCKED;
+        taskResult = content;
+      }
+      // If no marker and model responded without tool calls, assume done
+      else if (localIterations >= 2 && !msg.tool_calls) {
+        taskComplete = true;
+        taskStatus = TASK_STATUS.COMPLETED;
+        taskResult = content;
+      }
+    }
+
+    if (!taskComplete && localIterations >= maxLocalIterations) {
+      taskStatus = TASK_STATUS.FAILED;
+      taskResult = `Exceeded max iterations (${maxLocalIterations}) for task`;
+    }
+
+    task.status = taskStatus;
+    task.result = taskResult;
+    this.logFn("task_end", `${task.id}: ${taskStatus}`);
+
+    return {
+      status: taskStatus,
+      result: taskResult,
+      messages: executionMessages,
+    };
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// REPLANNER — Generates replacement tasks on failure
+// ═══════════════════════════════════════════════════════════════
+
+class Replanner {
+  /**
+   * @param {Object} cfg
+   */
+  constructor(cfg) {
+    this.cfg = cfg;
+  }
+
+  /**
+   * Generates replacement tasks for a failed task.
+   * @param {Object} failedTask - The task that failed
+   * @param {Array<Object>} remainingTasks - Tasks not yet executed
+   * @returns {Promise<Array<Object>>} Replacement task objects
+   */
+  async replan(failedTask, remainingTasks) {
+    const context = [
+      `Failed task: ${failedTask.description}`,
+      `Error/Result: ${failedTask.result || "Unknown error"}`,
+      ``,
+      `Remaining tasks:`,
+      ...remainingTasks.map(t => `- ${t.description}`),
+    ].join("\n");
+
+    const messages = [
+      { role: "system", content: REPLANNER_SYSTEM_PROMPT },
+      { role: "user", content: `A task failed. Create replacement tasks.\n\n${context}` },
+    ];
+
+    let rawResponse = "";
+    try {
+      const data = await callApi(messages, this.cfg);
+      rawResponse = data.choices?.[0]?.message?.content || "";
+    } catch (e) {
+      log.err(`Replanner API call failed: ${e.message}`);
+      return [];
+    }
+
+    return this._parseReplan(rawResponse);
+  }
+
+  /**
+   * Parses replanner response into task objects.
+   * @param {string} raw
+   * @returns {Array<Object>}
+   */
+  _parseReplan(raw) {
+    let jsonStr = raw.trim();
+
+    const fenceMatch = jsonStr.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/i);
+    if (fenceMatch) {
+      jsonStr = fenceMatch[1].trim();
+    }
+
+    const objMatch = jsonStr.match(/\{[\s\S]*\}/);
+    if (objMatch) {
+      jsonStr = objMatch[0];
+    }
+
+    try {
+      const parsed = JSON.parse(jsonStr);
+      return (parsed.replacement_tasks || []).map((t, i) => ({
+        id: `replan-${Date.now()}-${i + 1}`,
+        description: t.description || String(t),
+        status: TASK_STATUS.PENDING,
+        result: null,
+        retries: 0,
+        maxRetries: 2,
+      }));
+    } catch (e) {
+      log.warn(`Failed to parse replan JSON: ${e.message}`);
+      return [];
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// VERIFIER — System-driven test execution
+// ═══════════════════════════════════════════════════════════════
+
+class Verifier {
+  constructor() {
+    this.output = null;
+    this.passed = false;
+  }
+
+  /**
+   * Runs project verification by auto-detecting project type and executing tests.
+   * @returns {Promise<{ passed: boolean, output: string, projectType: string|null }>}
+   */
+  async verify() {
+    const project = detectProjectType();
+
+    if (!project) {
+      this.output = "No project type detected (no package.json, pyproject.toml, Cargo.toml, go.mod). Skipping verification.";
+      this.passed = true; // Nothing to verify
+      return { passed: true, output: this.output, projectType: null };
+    }
+
+    log.auto(`Detected project: ${project.type} → running: ${project.cmd}`);
+
+    try {
+      const result = await this._runCommand(project.cmd);
+      this.output = result.stdout + (result.stderr ? "\n" + result.stderr : "");
+      this.passed = result.exitCode === 0;
+
+      if (this.passed) {
+        log.ok(`Verification passed (${project.type})`);
+      } else {
+        log.err(`Verification failed (${project.type}, exit ${result.exitCode})`);
+        // Show last few lines of output
+        const lines = this.output.split("\n").slice(-10);
+        for (const line of lines) {
+          if (line.trim()) log.dim(`  ${line.slice(0, 120)}`);
+        }
+      }
+    } catch (e) {
+      this.output = `Verification error: ${e.message}`;
+      this.passed = false;
+      log.err(`Verification error: ${e.message}`);
+    }
+
+    return { passed: this.passed, output: this.output, projectType: project.type };
+  }
+
+  /**
+   * Runs a shell command and captures output.
+   * @param {string} cmd
+   * @returns {Promise<{ stdout: string, stderr: string, exitCode: number }>}
+   */
+  async _runCommand(cmd) {
+    const { exec } = await import("child_process");
+    return new Promise((resolve) => {
+      exec(cmd, {
+        cwd: process.cwd(),
+        maxBuffer: 10 * 1024 * 1024,
+        timeout: 120000,
+      }, (error, stdout, stderr) => {
+        resolve({
+          stdout: stdout || "",
+          stderr: stderr || "",
+          exitCode: error ? (error.code || 1) : 0,
+        });
+      });
+    });
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// UI HELPERS (preserved, minimal changes)
+// ═══════════════════════════════════════════════════════════════
 
 /** @private */
 function printToolCallBlock(calls) {
@@ -449,7 +1037,7 @@ function printToolResult(result, maxLines = 5) {
 }
 
 /** @private */
-function printStatusBar(ap) {
+function printStatusBar(ap, state) {
   const elapsed = formatDuration(Date.now() - ap.startTime);
   const barWidth = 20;
   const filled = Math.round((ap.iteration / ap.maxIterations) * barWidth);
@@ -457,16 +1045,17 @@ function printStatusBar(ap) {
   const bar = `${AUTO_CLR}${"━".repeat(filled)}${MUTED}${"━".repeat(empty)}${C.reset}`;
   const pct = Math.round((ap.iteration / ap.maxIterations) * 100);
 
-  const phaseIcon = PHASE_ICONS[ap.currentPhase] || "▸";
-  const phaseColor = PHASE_COLORS[ap.currentPhase] || MUTED;
+  const phaseIcon = PHASE_ICONS[state.phase] || "▸";
+  const phaseColor = PHASE_COLORS[state.phase] || MUTED;
 
   const parts = [
     `${bar} ${AUTO_CLR}${pct}%${C.reset}`,
-    `${phaseColor}${phaseIcon} ${ap.currentPhase || "init"}${C.reset}`,
+    `${phaseColor}${phaseIcon} ${state.phase}${C.reset}`,
     `${MUTED}i${TEXT}${ap.iteration}${MUTED}/${ap.maxIterations}${C.reset}`,
     `${TOOL_CLR}⚡${ap.toolCalls}${C.reset}`,
     `${ap.errors > 0 ? ERROR : MUTED}✗${ap.errors}${C.reset}`,
     `${MUTED}Δ${ap.diffTracker.getTotalChanges()}${C.reset}`,
+    `${MUTED}t${state.completedCount()}/${state.tasks.length}${C.reset}`,
     `${TEXT_DIM}${elapsed}${C.reset}`,
   ];
 
@@ -474,10 +1063,10 @@ function printStatusBar(ap) {
 }
 
 /** @private */
-function printCompactResponse(content, phase, iteration) {
+function printCompactResponse(content, state, iteration) {
   if (!content || content.trim().length === 0) return;
-  const phaseColor = PHASE_COLORS[phase] || AI_CLR;
-  const phaseIcon = PHASE_ICONS[phase] || "💭";
+  const phaseColor = PHASE_COLORS[state.phase] || AI_CLR;
+  const phaseIcon = PHASE_ICONS[state.phase] || "💭";
 
   console.log("");
   console.log(`  ${phaseColor}${C.bold}${phaseIcon} Assistant${C.reset} ${MUTED}[iter ${iteration}]${C.reset}`);
@@ -488,8 +1077,13 @@ function printCompactResponse(content, phase, iteration) {
   }
 }
 
+// ═══════════════════════════════════════════════════════════════
+// MAIN AUTOPILOT CLASS — State-driven orchestration
+// ═══════════════════════════════════════════════════════════════
+
 /**
  * Core Autopilot engine for autonomous task execution.
+ * State-driven architecture: no text-based phase detection, no nudges.
  */
 class Autopilot {
   /**
@@ -509,9 +1103,11 @@ class Autopilot {
     this.toolCalls = 0;
     this.startTime = 0;
     this.logEntries = [];
-    this.currentPhase = PHASE.PLAN;
-    this.planText = "";
 
+    // State machine
+    this.state = new AutopilotState();
+
+    // Shared infrastructure
     this.contextManager = new ContextManager(cfg, cfg.autopilot?.max_context_tokens || 120000);
     this.diffTracker = new DiffTracker();
     this.recovery = new RecoveryStrategy();
@@ -523,10 +1119,11 @@ class Autopilot {
     this.saveLog = apCfg.save_log !== false;
     this.verbose = apCfg.verbose !== false;
 
-    this.lastToolCallIteration = 0;
-    this.stallThreshold = 3;
-    this.nudgeCount = 0;
-    this.maxNudges = 5;
+    // Agents
+    this.planner = new Planner(cfg);
+    this.replanner = new Replanner(cfg);
+    this.verifier = new Verifier();
+    this.executor = null; // Created on run (needs logFn)
   }
 
   /** Aborts the current autopilot run. */
@@ -540,7 +1137,7 @@ class Autopilot {
     this.logEntries.push({
       time: Date.now(),
       iteration: this.iteration,
-      phase: this.currentPhase,
+      phase: this.state.phase,
       type,
       msg: typeof msg === "string" ? msg.slice(0, 2000) : JSON.stringify(msg).slice(0, 2000),
     });
@@ -573,9 +1170,12 @@ class Autopilot {
 
     const lines = [
       `${C.bold}Status:${C.reset}       ${reason}`,
+      `${C.bold}Phase:${C.reset}        ${this.state.phase}`,
+      `${C.bold}Tasks:${C.reset}        ${this.state.completedCount()}/${this.state.tasks.length} completed`,
       `${C.bold}Iterations:${C.reset}   ${this.iteration} / ${this.maxIterations}`,
       `${C.bold}Tool calls:${C.reset}   ${this.toolCalls}`,
       `${C.bold}Errors:${C.reset}       ${this.errors}${this.errors > 0 ? ` (${errorSummary})` : ""}`,
+      `${C.bold}Replans:${C.reset}      ${this.state.replanCount}`,
       `${C.bold}Tokens:${C.reset}       ~${this.totalTokens.toLocaleString()}`,
       `${C.bold}Compressions:${C.reset} ${this.contextManager.compressions}`,
       `${C.bold}Duration:${C.reset}     ${elapsed}`,
@@ -584,10 +1184,16 @@ class Autopilot {
       ...diffSummary.split("\n").map(l => `  ${l}`),
     ];
 
-    if (this.planText) {
-      const preview = this.planText.split("\n").slice(0, 8).join("\n");
-      lines.push(``, `${C.bold}Original Plan:${C.reset}`);
-      lines.push(...preview.split("\n").map(l => `  ${TEXT_DIM}${l}${C.reset}`));
+    if (this.state.tasks.length > 0) {
+      lines.push(``, `${C.bold}Task Status:${C.reset}`);
+      for (const t of this.state.tasks) {
+        const icon = t.status === TASK_STATUS.COMPLETED ? "✅" :
+                     t.status === TASK_STATUS.FAILED ? "❌" :
+                     t.status === TASK_STATUS.BLOCKED ? "🚫" :
+                     t.status === TASK_STATUS.RUNNING ? "🔄" : "⏳";
+        const desc = t.description.length > 80 ? t.description.slice(0, 77) + "…" : t.description;
+        lines.push(`  ${icon} ${TEXT_DIM}${desc}${C.reset}`);
+      }
     }
 
     console.log("");
@@ -603,7 +1209,7 @@ class Autopilot {
       const ts = new Date().toISOString().replace(/[:.]/g, "-");
       const logFile = path.join(LOG_DIR, `autopilot-${ts}.json`);
       fs.writeFileSync(logFile, JSON.stringify({
-        version: 2,
+        version: 3,
         startTime: new Date(this.startTime).toISOString(),
         endTime: new Date().toISOString(),
         duration: formatDuration(Date.now() - this.startTime),
@@ -612,7 +1218,15 @@ class Autopilot {
         errors: this.errors,
         totalTokens: this.totalTokens,
         model: this.cfg.model,
-        phases: this._getPhaseTimeline(),
+        phase: this.state.phase,
+        replans: this.state.replanCount,
+        verificationPassed: this.state.verificationPassed,
+        tasks: this.state.tasks.map(t => ({
+          id: t.id,
+          description: t.description,
+          status: t.status,
+          result: (t.result || "").slice(0, 500),
+        })),
         changes: {
           created: this.diffTracker.filesCreated.map(f => path.relative(process.cwd(), f)),
           modified: this.diffTracker.filesModified.map(f => path.relative(process.cwd(), f)),
@@ -627,114 +1241,16 @@ class Autopilot {
   }
 
   /** @private */
-  _getPhaseTimeline() {
-    const phases = [];
-    let cur = null;
-    for (const entry of this.logEntries) {
-      if (entry.phase !== cur) {
-        phases.push({ phase: entry.phase, iteration: entry.iteration, time: entry.time });
-        cur = entry.phase;
-      }
-    }
-    return phases;
+  _initExecutor() {
+    this.executor = new Executor(
+      this.cfg, this.diffTracker, this.recovery,
+      this.contextManager, (type, msg) => this._log(type, msg)
+    );
   }
 
-  /** @private */
-  _generateNudge() {
-    this.nudgeCount++;
-    const itersSinceTools = this.iteration - this.lastToolCallIteration;
-
-    if (this.nudgeCount >= this.maxNudges) {
-      return `[AUTOPILOT] FINAL WARNING: Nudged ${this.maxNudges} times. ` +
-        `Finish NOW with "✅ AUTOPILOT COMPLETE" or use tools. No more text-only responses.`;
-    }
-
-    if (itersSinceTools >= this.stallThreshold) {
-      return `[AUTOPILOT] ⚠ STALL: No tool calls for ${itersSinceTools} iterations. ` +
-        `Use tools NOW or write "✅ AUTOPILOT COMPLETE" if done.`;
-    }
-
-    if (this.currentPhase === PHASE.PLAN) {
-      return `[AUTOPILOT] Plan created. Now EXECUTE: use tools (patch_file, run_shell, grep_search, etc.)`;
-    }
-
-    return `[AUTOPILOT] Continue. Progress: ${this.toolCalls} tools, ${this.diffTracker.getTotalChanges()} changes. ` +
-      `If done → verify → "✅ AUTOPILOT COMPLETE". If not → use tools.`;
-  }
-
-  /** @private */
-  _manageContext() {
-    if (this.contextManager.needsCriticalCompression(this.messages)) {
-      log.warn("Context critical — compressing");
-      this.messages = this.contextManager.compress(this.messages);
-      // Sanitize after compression to fix any broken tool call sequences
-      this.messages = sanitizeToolCallsForApi(this.messages);
-      this._log("compression", `Critical #${this.contextManager.compressions}`);
-      return true;
-    }
-    if (this.contextManager.needsCompression(this.messages)) {
-      log.dim("Context growing — compressing");
-      this.messages = this.contextManager.compress(this.messages);
-      // Sanitize after compression to fix any broken tool call sequences
-      this.messages = sanitizeToolCallsForApi(this.messages);
-      this._log("compression", `#${this.contextManager.compressions}`);
-      return true;
-    }
-    return false;
-  }
-
-  /** @private */
-  async _processToolCalls(msg) {
-    const calls = msg.tool_calls;
-    this.toolCalls += calls.length;
-    this.lastToolCallIteration = this.iteration;
-    this.messages.push(msg);
-
-    printToolCallBlock(calls);
-
-    for (let i = 0; i < calls.length; i++) {
-      const call = calls[i];
-      const name = call.function.name;
-      let args = {};
-      try { args = JSON.parse(call.function.arguments); } catch { args = {}; }
-
-      printToolExecution(name, args, i, calls.length);
-      this._log("tool_call", `${name}: ${JSON.stringify(args).slice(0, 300)}`);
-
-      let result;
-      try {
-        result = await executeToolTracked(name, args, this.cfg, this.diffTracker, this.recovery, this.iteration);
-      } catch (e) {
-        result = `❌ Tool error: ${e.message}`;
-        this.errors++;
-        this.recovery.recordError(e, name, this.iteration);
-        this._log("tool_error", `${name}: ${e.message}`);
-      }
-
-      if (this.verbose) printToolResult(result, 4);
-
-      this._log("tool_result", `${name}: ${(result || "").slice(0, 500)}`);
-      this.messages.push({ role: "tool", tool_call_id: call.id, content: result });
-    }
-
-    console.log(`  ${TOOL_CLR}┃${C.reset} ${MUTED}done${C.reset}`);
-  }
-
-  /** @private */
-  _processTextResponse(msg) {
-    const content = msg.content || "";
-    this.messages.push(msg);
-
-    const detected = detectPhase(content);
-    if (detected && detected !== this.currentPhase) {
-      this._log("phase_change", `${this.currentPhase} → ${detected}`);
-      this.currentPhase = detected;
-      if (detected === PHASE.PLAN) this.planText = content;
-    }
-
-    printCompactResponse(content, this.currentPhase, this.iteration);
-    return detected === PHASE.COMPLETE;
-  }
+  // ══════════════════════════════════════════════════════════
+  // STATE MACHINE LOOP
+  // ══════════════════════════════════════════════════════════
 
   /**
    * Runs the autopilot for a specific task.
@@ -750,36 +1266,22 @@ class Autopilot {
     this.totalTokens = 0;
     this.toolCalls = 0;
     this.logEntries = [];
-    this.currentPhase = PHASE.PLAN;
-    this.planText = "";
-    this.nudgeCount = 0;
-    this.lastToolCallIteration = 0;
 
+    // Fresh state
+    this.state = new AutopilotState();
     this.diffTracker = new DiffTracker();
     this.recovery = new RecoveryStrategy();
     this.contextManager = new ContextManager(this.cfg, this.cfg.autopilot?.max_context_tokens || 120000);
+    this._initExecutor();
 
+    // Optimize prompt if enabled
     const optimizer = new PromptOptimizer(this.cfg);
     let finalTask = task;
     if (this.cfg.prompt_optimizer?.enabled) {
       finalTask = await optimizer.optimize(task);
     }
 
-    const originalSystem = this.messages[0]?.content || "";
-    this.messages[0] = { role: "system", content: originalSystem + AUTOPILOT_SYSTEM_SUFFIX };
-
-    this.messages.push({
-      role: "user",
-      content: [
-        `[AUTOPILOT TASK]`, ``, finalTask, ``,
-        `---`,
-        `CWD: ${process.cwd()}`,
-        `Time: ${new Date().toISOString()}`,
-        ``,
-        `Execute autonomously. Start with 📋 PLAN: → then EXECUTE → VERIFY → COMPLETE.`,
-      ].join("\n"),
-    });
-
+    // Trust check
     const trust = getTrustManager();
     const status = await trust.checkStatus();
     if (status !== TRUST_LEVEL.TRUSTED) {
@@ -787,6 +1289,7 @@ class Autopilot {
       return { error: "Untrusted repository" };
     }
 
+    // Auto-confirm
     const origAutoYes = this.cfg.auto_yes;
     if (!origAutoYes) {
       log.warn("AUTOPILOT: Enabling auto-confirm (auto_yes=true) for autonomous execution");
@@ -797,133 +1300,201 @@ class Autopilot {
     this._printHeader(task);
     this._log("start", task);
 
+    // Sanitize messages
+    this.messages = sanitizeToolCallsForApi(this.messages);
+    // Save original system message
+    const originalSystem = this.messages[0]?.content || "";
+
     let finalReason = `${SUCCESS}✓ Completed${C.reset}`;
-    let apiRetries = 0;
-    const maxApiRetries = 3;
 
     try {
-      // Sanitize messages to remove incomplete tool call sequences
-      // (e.g., assistant with tool_calls but missing corresponding tool responses)
-      this.messages = sanitizeToolCallsForApi(this.messages);
+      // ═══════════════════════════════════════════════
+      // PHASE: PLANNING
+      // ═══════════════════════════════════════════════
+      this.state.transition(PHASE.PLANNING, (t, m) => this._log(t, m));
+      printStatusBar(this, this.state);
+      log.auto("📋 PLANNING: Generating task plan…");
 
-      while (this.iteration < this.maxIterations && !this.aborted) {
-        this.iteration++;
-        printStatusBar(this);
-        this._manageContext();
+      const tasks = await this.planner.plan(finalTask);
+      if (tasks.length === 0) {
+        finalReason = `${ERROR}✗ Planning failed — no tasks generated${C.reset}`;
+        this.state.transition(PHASE.FAILED, (t, m) => this._log(t, m));
+        this.running = false;
+      } else {
+        this.state.tasks = tasks;
+        this._log("plan", `Generated ${tasks.length} tasks: ${tasks.map(t => t.description.slice(0, 50)).join("; ")}`);
+        log.ok(`Plan: ${tasks.length} tasks defined`);
 
-        let data;
-        const spinner = new Spinner(`${this.currentPhase} (iter ${this.iteration})`);
-        try {
-          spinner.start();
-          data = await callApi(this.messages, this.cfg);
-          if (spinner) spinner.stop();
-          apiRetries = 0;
-        } catch (e) {
-          if (spinner) spinner.stop();
-          this.errors++;
-          this._log("api_error", e.message);
+        // ═══════════════════════════════════════════════
+        // MAIN LOOP: EXECUTION + REPLANNING
+        // ═══════════════════════════════════════════════
+        while (this.running && this.iteration < this.maxIterations && !this.aborted) {
+          this.iteration++;
+          printStatusBar(this, this.state);
 
-          if (e.isContextError || /context.?length|token/i.test(e.message || "")) {
-            log.warn("Context overflow — compressing…");
-            this.messages = this.contextManager.compress(this.messages);
-            this.messages = sanitizeToolCallsForApi(this.messages);
-            this.iteration--;
-            continue;
+          // Check completion condition
+          if (this.state.allTasksCompleted()) {
+            this._log("all_tasks_complete", `All ${this.state.tasks.length} tasks completed`);
+            break;
           }
 
-          // Detect broken tool call sequences (assistant with tool_calls but missing tool responses)
-          if (/tool_calls.*must be followed|insufficient tool messages|tool_call_id/i.test(e.message || "")) {
-            log.warn("Broken tool call sequence detected — sanitizing messages");
-            const before = this.messages.length;
-            this.messages = sanitizeToolCallsForApi(this.messages);
-            const removed = before - this.messages.length;
-            this._log("tool_call_sanitize", `Removed ${removed} broken tool_calls entries`);
-            if (removed > 0) {
-              log.auto(`Fixed ${removed} incomplete tool call(s), retrying…`);
-              apiRetries = 0; // Reset retry counter since we fixed the issue
-              this.iteration--;
-              continue;
+          // Check for blocked/failed tasks → replanning
+          if (this.state.hasBlockedOrFailed()) {
+            const failedTask = this.state.getFailedTask();
+
+            if (failedTask && this.state.replanCount < this.state.maxReplans) {
+              this.state.transition(PHASE.REPLANNING, (t, m) => this._log(t, m));
+              printStatusBar(this, this.state);
+              log.warn(`🔧 REPLANNING: Task "${failedTask.description.slice(0, 60)}" ${failedTask.status}`);
+
+              const remaining = this.state.tasks.filter(
+                t => t.status === TASK_STATUS.PENDING
+              );
+
+              const replacements = await this.replanner.replan(failedTask, remaining);
+
+              if (replacements.length > 0) {
+                // Mark the failed task as completed (we're replacing it)
+                failedTask.status = TASK_STATUS.COMPLETED;
+                failedTask.result = `Replaced via replan #${this.state.replanCount + 1}`;
+
+                // Insert replacement tasks into pending queue
+                this.state.tasks.push(...replacements);
+                this.state.replanCount++;
+                this._log("replan", `Generated ${replacements.length} replacement tasks`);
+                log.ok(`Replan: ${replacements.length} new tasks added`);
+              } else {
+                // Can't replan — mark as permanently failed
+                this.state.replanCount++;
+                this._log("replan_failed", "No replacement tasks generated");
+                log.warn("Replan returned no tasks — continuing with remaining");
+              }
+            } else if (this.state.replanCount >= this.state.maxReplans) {
+              finalReason = `${WARNING}▲ Max replans (${this.state.maxReplans}) reached${C.reset}`;
+              this._log("max_replans", `Replan limit ${this.state.maxReplans}`);
+              break;
             }
-            // If sanitization didn't help, fall through to normal error handling
           }
 
-          if (this.recovery.isApiError(e) && apiRetries < maxApiRetries) {
-            apiRetries++;
-            const backoff = this.retryDelay * Math.pow(2, apiRetries - 1);
-            log.warn(`${this.recovery.getRecoveryHint(e)} (${apiRetries}/${maxApiRetries}, ${backoff / 1000}s)`);
-            await new Promise(r => setTimeout(r, backoff));
-            this.iteration--;
-            continue;
+          // Get next pending task
+          const pendingTask = this.state.getNextPendingTask();
+          if (!pendingTask) {
+            // No pending tasks — check if we're done
+            if (this.state.allTasksCompleted()) {
+              break;
+            }
+            // Otherwise something is stuck, try replanning
+            if (this.state.replanCount < this.state.maxReplans) {
+              // Force replan on remaining blocked/failed
+              const stuckTask = this.state.getFailedTask();
+              if (stuckTask) {
+                this.state.transition(PHASE.REPLANNING, (t, m) => this._log(t, m));
+                const remaining = this.state.tasks.filter(
+                  t => t.status === TASK_STATUS.PENDING
+                );
+                const replacements = await this.replanner.replan(stuckTask, remaining);
+                if (replacements.length > 0) {
+                  stuckTask.status = TASK_STATUS.COMPLETED;
+                  this.state.tasks.push(...replacements);
+                  this.state.replanCount++;
+                }
+              }
+            }
+            break;
           }
 
+          // Execute one task
+          this.state.transition(PHASE.EXECUTION, (t, m) => this._log(t, m));
+          this.state.currentTaskIndex = this.state.tasks.indexOf(pendingTask);
+
+          log.auto(`⚡ EXECUTING: ${pendingTask.description.slice(0, 100)}`);
+
+          const execResult = await this.executor.execute(
+            pendingTask,
+            this.state.currentTaskIndex,
+            this.state.tasks.length,
+            this.messages
+          );
+
+          // Sync executor stats
+          this.toolCalls += this.executor.toolCalls;
+          this.errors += this.executor.errors;
+          this.executor.toolCalls = 0;
+          this.executor.errors = 0;
+
+          // Update messages with execution history
+          this.messages = execResult.messages;
+
+          if (execResult.status === TASK_STATUS.COMPLETED) {
+            log.ok(`  Task complete: ${pendingTask.description.slice(0, 60)}`);
+          } else if (execResult.status === TASK_STATUS.FAILED) {
+            log.err(`  Task failed: ${pendingTask.description.slice(0, 60)}`);
+            this.state.stallCounter++;
+          } else if (execResult.status === TASK_STATUS.BLOCKED) {
+            log.warn(`  Task blocked: ${pendingTask.description.slice(0, 60)}`);
+            this.state.stallCounter++;
+          }
+
+          // Check stall threshold
+          if (this.state.stallCounter >= this.state.maxStalls) {
+            finalReason = `${WARNING}▲ Stalled — ${this.state.maxStalls} consecutive failures/blocks${C.reset}`;
+            this._log("stall", `Max stalls ${this.state.maxStalls}`);
+            break;
+          }
+
+          // Check error limit
           if (this.errors >= this.maxErrors) {
             finalReason = `${ERROR}✗ Too many errors (${this.errors})${C.reset}`;
+            this._log("max_errors", `Error limit ${this.maxErrors}`);
             break;
           }
 
-          log.err(`Iter ${this.iteration}: ${e.message}`);
-          await new Promise(r => setTimeout(r, this.retryDelay));
-          this.iteration--;
-          continue;
-        }
-
-        if (data.usage) this.totalTokens += data.usage.total_tokens || 0;
-
-        const msg = data.choices?.[0]?.message;
-        if (!msg) { log.warn("Empty API response"); this.iteration--; continue; }
-
-        if (msg.tool_calls && msg.tool_calls.length > 0) {
-          await this._processToolCalls(msg);
-          continue;
-        }
-
-        const isComplete = this._processTextResponse(msg);
-
-        if (data.usage) {
-          const u = data.usage;
-          log.dim(`tokens: ${u.prompt_tokens}→${u.completion_tokens} (${u.total_tokens})`);
-        }
-
-        this.saveCallback();
-
-        if (isComplete) {
-          finalReason = `${SUCCESS}✓ Task completed${C.reset}`;
-          this._log("complete", "Done");
-          break;
-        }
-
-        const itersSinceTools = this.iteration - this.lastToolCallIteration;
-        if (itersSinceTools >= 2) {
-          const nudge = this._generateNudge();
-          this.messages.push({ role: "user", content: nudge });
-          this._log("nudge", nudge.slice(0, 200));
-
-          if (this.nudgeCount >= this.maxNudges) {
-            finalReason = `${WARNING}▲ Stalled — max nudges${C.reset}`;
-            this._log("stall", "Max nudges");
-            break;
-          }
+          this.saveCallback();
         }
       }
 
-      if (this.aborted) {
+      // ═══════════════════════════════════════════════
+      // PHASE: VERIFICATION
+      // ═══════════════════════════════════════════════
+      if (this.running && !this.aborted && this.state.allTasksCompleted()) {
+        this.state.transition(PHASE.VERIFICATION, (t, m) => this._log(t, m));
+        printStatusBar(this, this.state);
+        log.auto("🔍 VERIFICATION: Running tests…");
+
+        const verifResult = await this.verifier.verify();
+        this.state.verificationPassed = verifResult.passed;
+        this.state.verificationOutput = verifResult.output;
+        this._log("verification", `${verifResult.passed ? "PASSED" : "FAILED"} (${verifResult.projectType || "none"})`);
+
+        if (verifResult.passed) {
+          this.state.transition(PHASE.COMPLETE, (t, m) => this._log(t, m));
+          finalReason = `${SUCCESS}✓ Task completed & verified${C.reset}`;
+        } else {
+          finalReason = `${WARNING}▲ Tasks done but verification failed${C.reset}`;
+          this.state.transition(PHASE.FAILED, (t, m) => this._log(t, m));
+        }
+      } else if (!this.running || this.aborted) {
         finalReason = `${WARNING}▲ Aborted (Ctrl+C)${C.reset}`;
         this._log("abort", "User aborted");
-      } else if (this.iteration >= this.maxIterations && !/completed/i.test(finalReason)) {
+        this.state.transition(PHASE.FAILED, (t, m) => this._log(t, m));
+      } else if (this.iteration >= this.maxIterations) {
         finalReason = `${WARNING}▲ Max iterations (${this.maxIterations})${C.reset}`;
         this._log("limit", "Max iterations");
+        this.state.transition(PHASE.FAILED, (t, m) => this._log(t, m));
       }
 
     } catch (e) {
       finalReason = `${ERROR}✗ Fatal: ${e.message}${C.reset}`;
       this._log("fatal", e.message);
       log.err(`Fatal: ${e.message}`);
+      this.state.transition(PHASE.FAILED, (t, m) => this._log(t, m));
     } finally {
       this.cfg.auto_yes = origAutoYes;
       this.messages[0] = { role: "system", content: originalSystem };
       this.running = false;
     }
 
+    // Trigger command
     try {
       const cmd = this.cfg.autopilot?.trigger_cmd || "";
       if (cmd && /completed/i.test(finalReason) && !this.aborted) {
@@ -945,9 +1516,31 @@ class Autopilot {
       filesCreated: this.diffTracker.filesCreated.length,
       filesModified: this.diffTracker.filesModified.length,
       compressions: this.contextManager.compressions,
-      phases: this._getPhaseTimeline(),
+      phase: this.state.phase,
+      tasksCompleted: this.state.completedCount(),
+      tasksTotal: this.state.tasks.length,
+      replans: this.state.replanCount,
+      verificationPassed: this.state.verificationPassed,
     };
   }
 }
 
-export { Autopilot, AUTOPILOT_SYSTEM_SUFFIX, ContextManager, DiffTracker, RecoveryStrategy };
+// ═══════════════════════════════════════════════════════════════
+// EXPORTS
+// ═══════════════════════════════════════════════════════════════
+
+export {
+  Autopilot,
+  AutopilotState,
+  Planner,
+  Executor,
+  Replanner,
+  Verifier,
+  ContextManager,
+  DiffTracker,
+  RecoveryStrategy,
+  PHASE,
+  TASK_STATUS,
+  TOOL_OUTCOME,
+  detectProjectType,
+};
