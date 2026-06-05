@@ -1,7 +1,7 @@
 import { 
   callApi, callApiStream, handleTools, log, Spinner 
 } from "../core.js";
-import { StreamRenderer, renderNonStreaming } from "./ui-render.js";
+import { StreamRenderer, renderNonStreaming } from "../modules/ui-render.js";
 
 /**
  * Handles the interaction with the AI, including streaming, tool calls, and retries.
