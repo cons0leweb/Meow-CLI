@@ -46,12 +46,20 @@ function _success(message, data, metadata) {
 
 /**
  * Creates an error ToolResult.
+ * Alias: toolError
  * @param {string} message
  * @param {*} [data]
  * @param {ToolMetadata} [metadata]
  * @returns {ToolResult}
  */
 export function error(message, data, metadata) {
+  return _error(message, data, metadata);
+}
+
+export { error as toolError };
+
+/** @private */
+function _error(message, data, metadata) {
   return {
     success: false,
     status: "error",
