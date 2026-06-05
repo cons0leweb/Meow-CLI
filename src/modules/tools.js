@@ -9,7 +9,7 @@ import { loadUndoState, saveUndoState } from "./persistence.js";
 import { callApi } from "./api.js";
 import { mcpManager } from "./mcp/manager.js";
 import { toolRegistry } from "./tool-registry.js";
-import { formatToolResult } from "./tool-result.js";
+import { formatToolResult, success, error, info, cancelled } from "./tool-result.js";
 
 /**
  * Core tool definitions for the AI model.
