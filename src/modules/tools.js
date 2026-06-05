@@ -649,12 +649,13 @@ function getSystemInfo() {
 function listDir(p, recursive = false) {
   try {
     const dir = path.resolve(p);
-    if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) return `❌ Directory not found: ${dir}`;
+    if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) return error(`❌ Directory not found: ${dir}`);
 
     if (!recursive) {
-      return fs.readdirSync(dir).map(n => {
+      const entries = fs.readdirSync(dir).map(n => {
         try { return fs.statSync(path.join(dir, n)).isDirectory() ? n + "/" : n; } catch { return n; }
-      }).sort().join("\n");
+      }).sort();
+      return success(null, entries.join("\n"));
     }
 
     const SKIP = new Set(["node_modules", ".git", ".next", "dist", "build", "__pycache__", ".venv", "venv"]);
@@ -681,8 +682,8 @@ function listDir(p, recursive = false) {
 
     walk(dir, "", 0);
     if (results.length >= MAX_ENTRIES) results.push(`… (truncated at ${MAX_ENTRIES} entries)`);
-    return results.join("\n");
-  } catch (e) { return `❌ Error: ${e.message}`; }
+    return success(null, results.join("\n"));
+  } catch (e) { return error(`❌ Error: ${e.message}`); }
 }
 
 /**
