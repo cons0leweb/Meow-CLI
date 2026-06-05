@@ -1169,6 +1169,7 @@ class Autopilot {
       `${MUTED}Task:${C.reset} ${TEXT}${task.slice(0, 120)}${task.length > 120 ? "…" : ""}${C.reset}`,
       ``,
       `${MUTED}Model:${C.reset}        ${ACCENT}${this.cfg.model}${C.reset}`,
+      `${MUTED}Version:${C.reset}      ${TEXT_DIM}v${AUTOPILOT_VERSION}${C.reset}`,
       `${MUTED}Max iters:${C.reset}    ${TEXT}${this.maxIterations}${C.reset}`,
       `${MUTED}Max errors:${C.reset}   ${TEXT}${this.maxErrors}${C.reset}`,
       `${MUTED}Auto-confirm:${C.reset} ${SUCCESS}ON${C.reset}`,
