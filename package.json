@@ -1,6 +1,6 @@
 {
   "name": "meowcli",
-  "version": "3.0.14",
+  "version": "3.0.15",
   "description": "Powerful terminal-based AI Agent with streaming, permissions, checkpoints, and autonomous mode",
   "main": "index.js",
   "type": "module",
