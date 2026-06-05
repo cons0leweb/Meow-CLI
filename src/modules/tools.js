@@ -8,6 +8,8 @@ import { CONF_FILE, DATA_DIR, UNDO_FILE } from "./config.js";
 import { loadUndoState, saveUndoState } from "./persistence.js";
 import { callApi } from "./api.js";
 import { mcpManager } from "./mcp/manager.js";
+import { toolRegistry } from "./tool-registry.js";
+import { formatToolResult } from "./tool-result.js";
 
 /**
  * Core tool definitions for the AI model.
