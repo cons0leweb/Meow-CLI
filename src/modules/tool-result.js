@@ -21,12 +21,20 @@
 
 /**
  * Creates a successful ToolResult.
+ * Alias: toolSuccess
  * @param {string} message
  * @param {*} [data]
  * @param {ToolMetadata} [metadata]
  * @returns {ToolResult}
  */
 export function success(message, data, metadata) {
+  return _success(message, data, metadata);
+}
+
+export { success as toolSuccess };
+
+/** @private */
+function _success(message, data, metadata) {
   return {
     success: true,
     status: "success",
