@@ -540,7 +540,6 @@ async function moveFile(from, to, cfg = {}) {
     fs.mkdirSync(path.dirname(dest), { recursive: true });
     fs.renameSync(src, dest);
 
-    autoGitCommit(`move ${descFrom} to ${descTo}`, cfg);
     return success(`✅ Moved: ${descFrom} → ${descTo}`, null, { changedFiles: [src, dest] });
   } catch (e) { return error(`❌ Move error: ${e.message}`); }
 }
