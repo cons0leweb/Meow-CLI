@@ -115,3 +115,68 @@ export function toString(result) {
   }
   return result.message || String(result.data ?? "");
 }
+
+/**
+ * Formats a structured ToolResult into human-readable CLI/UI text
+ * with appropriate prefixes for each status type.
+ *
+ * Maintains backward compatibility with existing string-based consumers
+ * (LLM tool response messages, UI rendering) while adding structured metadata
+ * when available.
+ *
+ * @param {ToolResult} result - The structured result.
+ * @returns {string} Formatted string ready for display / LLM consumption.
+ */
+export function formatToolResult(result) {
+  if (!result) return "";
+
+  const { status, message, data, metadata } = result;
+
+  // Build the output lines
+  const lines = [];
+
+  // 1) Status line (message)
+  if (message) {
+    lines.push(message);
+  } else if (data !== null && data !== undefined) {
+    // No message but data present — use data as body
+    lines.push(typeof data === "object" ? JSON.stringify(data, null, 2) : String(data));
+  }
+
+  // 2) Data payload (if not already the only output)
+  if (data !== null && data !== undefined && message) {
+    if (typeof data === "object") {
+      lines.push(JSON.stringify(data, null, 2));
+    } else if (typeof data === "string" && data.length > 0) {
+      lines.push(data);
+    }
+  }
+
+  // 3) Metadata summary footer (compact, one line)
+  if (metadata && Object.keys(metadata).length > 0) {
+    const parts = [];
+    if (metadata.changedFiles?.length) {
+      parts.push(`files:${metadata.changedFiles.length}`);
+    }
+    if (metadata.exitCode !== undefined && metadata.exitCode !== null) {
+      parts.push(`exit:${metadata.exitCode}`);
+    }
+    if (metadata.bytesWritten !== undefined && metadata.bytesWritten !== null) {
+      const kb = metadata.bytesWritten >= 1024
+        ? `${(metadata.bytesWritten / 1024).toFixed(1)}KB`
+        : `${metadata.bytesWritten}B`;
+      parts.push(`wrote:${kb}`);
+    }
+    if (metadata.duration !== undefined && metadata.duration !== null) {
+      const ms = metadata.duration;
+      const dur = ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`;
+      parts.push(`took:${dur}`);
+    }
+    if (parts.length > 0) {
+      lines.push(`[${parts.join(" | ")}]`);
+    }
+  }
+
+  return lines.join("\n").trim() || status;
+}
+
