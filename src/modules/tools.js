@@ -727,14 +727,6 @@ async function writeFile(p, content, cfg = {}) {
     const existed = fs.existsSync(file);
     const old = existed ? fs.readFileSync(file, "utf8") : "";
     const desc = describeFileChange(file);
-    const diff = createTwoFilesPatch(desc, desc, old, content, "", "", { context: 3 });
-
-    const approved = await confirmUser(
-      `Apply write_file to ${desc}?\n${TEXT_DIM}${truncatePreview(diff)}${C.reset}`,
-      cfg.auto_yes,
-      false
-    );
-    //if (!approved) return info(`ℹ Cancelled write_file for ${desc}.`);
 
     const undoState = loadUndoState();
     undoState.push({ path: file, existed, content: old, time: Date.now() });
