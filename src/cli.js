@@ -141,6 +141,13 @@ async function main() {
   } catch {}
   ctx.refreshBanner();
   await mcpManager.init(ctx.cfg);
+  // Initialize ToolRegistry with all tool handlers
+  try {
+    const { initToolRegistry } = await import("./modules/tool-registry-init.js");
+    initToolRegistry();
+  } catch (e) {
+    log.warn(`Tool registry init warning: ${e.message}`);
+  }
   await loadPlugins(ctx.cfg, ctx);
 
   const trustStatus = await trust.checkStatus();
