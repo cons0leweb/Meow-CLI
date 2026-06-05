@@ -1560,5 +1560,6 @@ export {
   PHASE,
   TASK_STATUS,
   TOOL_OUTCOME,
+  AUTOPILOT_VERSION,
   detectProjectType,
 };
