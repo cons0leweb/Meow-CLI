@@ -385,5 +385,5 @@ const GIT_TOOLS = [
 export {
   gitDiff, gitLog, gitBranch, gitCommit, gitStash, gitStatus,
   detectCIProvider, listWorkflows, generateWorkflow, saveWorkflow,
-  SelfHealer, ciTool, GIT_TOOLS,
+  SelfHealer, ciTool, GIT_TOOLS, CICD_VERSION,
 };
