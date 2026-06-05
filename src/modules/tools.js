@@ -787,13 +787,6 @@ async function patchFile(p, oldString, newString, cfg = {}) {
 
     const patched = original.slice(0, index) + newString + original.slice(index + oldString.length);
     const desc = describeFileChange(file);
-    const diff = createTwoFilesPatch(desc, desc, original, patched, "", "", { context: 3 });
-    const approved = await confirmUser(
-      `Apply patch_file to ${desc}?\n${TEXT_DIM}${truncatePreview(diff)}${C.reset}`,
-      cfg.auto_yes,
-      false
-    );
-    //if (!approved) return info(`ℹ Cancelled patch_file for ${desc}.`);
 
     const undoState = loadUndoState();
     undoState.push({ path: file, existed: true, content: original, time: Date.now() });
