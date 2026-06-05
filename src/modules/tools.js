@@ -532,7 +532,7 @@ async function moveFile(from, to, cfg = {}) {
   try {
     const src = path.resolve(from);
     const dest = path.resolve(to);
-    if (!fs.existsSync(src)) return `❌ Source not found: ${src}`;
+    if (!fs.existsSync(src)) return error(`❌ Source not found: ${src}`);
 
     const descFrom = describeFileChange(src);
     const descTo = describeFileChange(dest);
@@ -542,14 +542,14 @@ async function moveFile(from, to, cfg = {}) {
       cfg.auto_yes,
       false
     );
-    // if (!approved) return `ℹ Cancelled move_file.`;
+    // if (!approved) return cancelled(`ℹ Cancelled move_file.`);
 
     fs.mkdirSync(path.dirname(dest), { recursive: true });
     fs.renameSync(src, dest);
 
     autoGitCommit(`move ${descFrom} to ${descTo}`, cfg);
-    return `✅ Moved: ${descFrom} → ${descTo}`;
-  } catch (e) { return `❌ Move error: ${e.message}`; }
+    return success(`✅ Moved: ${descFrom} → ${descTo}`, null, { changedFiles: [src, dest] });
+  } catch (e) { return error(`❌ Move error: ${e.message}`); }
 }
 
 /**
