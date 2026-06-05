@@ -4,6 +4,23 @@ import { execSync } from "child_process";
 import { log, C, ACCENT, MUTED, TEXT, TEXT_DIM, SUCCESS, ERROR, WARNING } from "../ui.js";
 import { callApi } from "../api.js";
 
+// ═══════════════════════════════════════════════════════════════
+// VERSION
+// ═══════════════════════════════════════════════════════════════
+
+/** @returns {string} CI/CD module version from package.json */
+function getCICDVersion() {
+  try {
+    const pkgPath = path.resolve(path.dirname(new URL(import.meta.url).pathname), "../../package.json");
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8"));
+    return pkg.version || "0.0.0";
+  } catch {
+    return "0.0.0";
+  }
+}
+
+const CICD_VERSION = getCICDVersion();
+
 /**
  * Executes a git command and returns the output.
  * @param {string} cmd - The git command to run.
