@@ -79,6 +79,11 @@ async function runPipeMode(opts) {
 
 async function main() {
   const opts = parseArgs();
+  if (opts.version) {
+    const { getCurrentVersion } = await import("./modules/updater.js");
+    console.log(`v${getCurrentVersion()}`);
+    process.exit(0);
+  }
   if (opts.pipe) return runPipeMode(opts);
 
   // --- Encryption init: first-run prompt, config encryption, cleanup ---
