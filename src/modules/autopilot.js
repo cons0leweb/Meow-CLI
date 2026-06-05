@@ -21,7 +21,7 @@ import { compactWithAI, compactMessages } from "./compact.js";
 /** @returns {string} Autopilot module version from package.json */
 function getAutopilotVersion() {
   try {
-    const pkgPath = path.join(path.dirname(import.meta.url ? new URL(import.meta.url).pathname : __dirname), "../../../package.json");
+    const pkgPath = path.resolve(path.dirname(new URL(import.meta.url).pathname), "../../package.json");
     const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8"));
     return pkg.version || "0.0.0";
   } catch {
