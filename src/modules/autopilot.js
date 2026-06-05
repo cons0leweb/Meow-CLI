@@ -15,6 +15,23 @@ import { sanitizeToolCallsForApi } from "./images.js";
 import { compactWithAI, compactMessages } from "./compact.js";
 
 // ═══════════════════════════════════════════════════════════════
+// VERSION — Read from package.json
+// ═══════════════════════════════════════════════════════════════
+
+/** @returns {string} Autopilot module version from package.json */
+function getAutopilotVersion() {
+  try {
+    const pkgPath = path.join(path.dirname(import.meta.url ? new URL(import.meta.url).pathname : __dirname), "../../../package.json");
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8"));
+    return pkg.version || "0.0.0";
+  } catch {
+    return "0.0.0";
+  }
+}
+
+const AUTOPILOT_VERSION = getAutopilotVersion();
+
+// ═══════════════════════════════════════════════════════════════
 // PHASE CONSTANTS — State machine phases
 // ═══════════════════════════════════════════════════════════════
 const PHASE = {
