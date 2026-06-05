@@ -28,7 +28,7 @@ import { DATA_DIR, CONF_FILE } from "./modules/config.js";
 
 function parseArgs() {
   const args = process.argv.slice(2);
-  const opts = { pipe: false, prompt: null, json: false, noStream: false, resume: null };
+  const opts = { pipe: false, prompt: null, json: false, noStream: false, resume: null, version: false };
 
   for (let i = 0; i < args.length; i++) {
     switch (args[i]) {
@@ -38,6 +38,8 @@ function parseArgs() {
       case "--json": opts.json = true; break;
       case "--no-stream": opts.noStream = true; break;
       case "--resume": opts.resume = args[++i] || "latest"; break;
+      case "--version":
+      case "-v": opts.version = true; break;
     }
   }
   if (!process.stdin.isTTY && !opts.prompt) opts.pipe = true;
