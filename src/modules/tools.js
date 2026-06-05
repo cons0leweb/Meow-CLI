@@ -875,7 +875,7 @@ function grepSearchJS(pattern, dir, include, maxResults) {
  * @param {string} cmd - Command to run.
  * @param {Object} [cfg={}] - Configuration.
  * @param {Object} [env=process.env] - Environment variables.
- * @returns {Promise<string>} Command output.
+ * @returns {Promise<ToolResult>} Structured result with stdout/stderr/exitCode/duration.
  */
 async function runShell(cmd, cfg = {}, env = process.env) {
   const desc = describeShellCommand(cmd);
@@ -884,9 +884,10 @@ async function runShell(cmd, cfg = {}, env = process.env) {
     cfg.auto_yes,
     false
   );
-  //if (!approved) return `ℹ Cancelled run_shell: ${desc}`;
+  //if (!approved) return cancelled(`ℹ Cancelled run_shell: ${desc}`);
 
   const timeoutMs = Number.isFinite(SHELL_TIMEOUT_MS) && SHELL_TIMEOUT_MS > 0 ? SHELL_TIMEOUT_MS : 30000;
+  const startTime = Date.now();
   return new Promise(resolve => {
     exec(
       cmd,
@@ -898,17 +899,39 @@ async function runShell(cmd, cfg = {}, env = process.env) {
         env: env,
       },
       (err, stdout, stderr) => {
-        const output = [];
-        if (stdout) output.push(`STDOUT:\n${stdout.trim()}`);
-        if (stderr) output.push(`STDERR:\n${stderr.trim()}`);
-        if (err && err.killed) {
-          output.push(`⚠ Process killed after ${timeoutMs}ms`);
-        }
-        if (err && err.code !== null && err.code !== undefined) output.push(`EXIT CODE: ${err.code}`);
+        const duration = Date.now() - startTime;
+        const exitCode = err ? (err.code ?? 1) : 0;
+        const killed = err?.killed === true;
 
         autoGitCommit(`shell ${desc}`, cfg);
 
-        resolve(output.join("\n\n") || "✅ Done (no output).");
+        const data = {
+          stdout: (stdout || "").trim(),
+          stderr: (stderr || "").trim(),
+          exitCode,
+          killed,
+        };
+
+        if (exitCode !== 0 && !killed) {
+          return resolve(error(
+            `❌ Command exited with code ${exitCode}: ${desc}`,
+            data,
+            { exitCode, duration }
+          ));
+        }
+
+        if (killed) {
+          return resolve(error(
+            `⚠ Process killed after ${timeoutMs}ms: ${desc}`,
+            data,
+            { exitCode, duration }
+          ));
+        }
+
+        const msg = data.stdout || data.stderr
+          ? `✅ Command completed: ${desc} (exit:${exitCode})`
+          : `✅ Done (no output): ${desc}`;
+        resolve(success(msg, data, { exitCode, duration }));
       }
     );
   });
@@ -980,7 +1003,7 @@ async function httpRequest(
   },
   cfg = {}
 ) {
-  if (!url) return "❌ Error: url required";
+  if (!url) return error("❌ Error: url required");
 
   const bodyPreview =
     body && method !== "GET" && method !== "HEAD"
@@ -993,10 +1016,11 @@ async function httpRequest(
     false
   );
 
-  //if (!approved) return `ℹ Cancelled http_request: ${method} ${url}`;
+  //if (!approved) return cancelled(`ℹ Cancelled http_request: ${method} ${url}`);
 
   const controller = new AbortController();
   const t = setTimeout(() => controller.abort(), timeout_ms);
+  const startTime = Date.now();
 
   try {
     const res = await fetch(url, {
@@ -1025,7 +1049,8 @@ async function httpRequest(
       }
     }
 
-    if (data.length > 50000) {
+    const truncated = data.length > 50000;
+    if (truncated) {
       data = data.slice(0, 50000) + `\n…[TRUNCATED]…`;
     }
 
@@ -1034,16 +1059,36 @@ async function httpRequest(
       headersObj[k] = v;
     });
 
-    return [
-      `STATUS: ${res.status} ${res.statusText}`,
-      `HEADERS: ${JSON.stringify(headersObj, null, 2)}`,
-      `BODY:\n${data}`,
-    ].join("\n\n");
+    const duration = Date.now() - startTime;
+    const resultData = {
+      status: res.status,
+      statusText: res.statusText,
+      headers: headersObj,
+      body: data,
+      truncated,
+      contentType,
+    };
+
+    if (res.ok) {
+      return success(
+        `✅ HTTP ${res.status} ${res.statusText}: ${method} ${url}`,
+        resultData,
+        { duration }
+      );
+    }
+    return error(
+      `❌ HTTP ${res.status} ${res.statusText}: ${method} ${url}`,
+      resultData,
+      { duration }
+    );
 
   } catch (e) {
-    return `❌ HTTP Error: ${
-      e.name === "AbortError" ? "Timeout" : e.message
-    }`;
+    const duration = Date.now() - startTime;
+    return error(
+      `❌ HTTP Error: ${e.name === "AbortError" ? "Timeout" : e.message}`,
+      { url, method },
+      { duration }
+    );
   } finally {
     clearTimeout(t);
   }
@@ -1057,14 +1102,15 @@ async function httpRequest(
  * @returns {Promise<string>} Search results JSON.
  */
 async function webSearch({ query, max_results = 5 }, cfg = {}) {
-  if (!query) return "❌ Error: query required";
+  if (!query) return error("❌ Error: query required");
   const approved = await confirmUser(
     `Run web search?\n${TEXT_DIM}query=${query}\nmax_results=${max_results}${C.reset}`,
     cfg.auto_yes,
     false
   );
-  //if (!approved) return `ℹ Cancelled web_search: ${query}`;
+  //if (!approved) return cancelled(`ℹ Cancelled web_search: ${query}`);
   const url = `https://duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
+  const startTime = Date.now();
   try {
     const res = await fetch(url, { headers: { "User-Agent": "meowcli/1.0" } });
     const html = await res.text();
@@ -1079,8 +1125,19 @@ async function webSearch({ query, max_results = 5 }, cfg = {}) {
       });
       if (results.length >= max_results) break;
     }
-    return results.length === 0 ? "ℹ No results." : JSON.stringify(results, null, 2);
-  } catch (e) { return `❌ Search error: ${e.message}`; }
+    const duration = Date.now() - startTime;
+    if (results.length === 0) {
+      return info("ℹ No results.", { query, results: [] });
+    }
+    return success(
+      `✅ Found ${results.length} result(s) for "${query}"`,
+      { query, results, count: results.length },
+      { duration }
+    );
+  } catch (e) {
+    const duration = Date.now() - startTime;
+    return error(`❌ Search error: ${e.message}`, { query }, { duration });
+  }
 }
 
 /**

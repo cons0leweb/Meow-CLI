@@ -286,5 +286,29 @@
       "gradientMid": "#C4A7E7",
       "gradientEnd": "#9CCFD8"
     }
+  },
+    "dark-coal": {
+    "name": "Dark Coal",
+    "description": "Striking monochrome theme with high contrast, subtle film grain aesthetic, and elegant typographic hierarchy",
+    "colors": {
+      "accent": "#FFFFFF",
+      "accent2": "#E8E8E8",
+      "accent3": "#F5F5F5",
+      "success": "#D4D4D4",
+      "warning": "#CCCCCC",
+      "error": "#A0A0A0",
+      "info": "#E0E0E0",
+      "muted": "#3A3A3A",
+      "text": "#F0F0F0",
+      "textDim": "#888888",
+      "toolClr": "#E8E8E8",
+      "userClr": "#FFFFFF",
+      "aiClr": "#DDDDDD",
+      "imgClr": "#CCCCCC",
+      "autoClr": "#C0C0C0",
+      "gradientStart": "#FFFFFF",
+      "gradientMid": "#AAAAAA",
+      "gradientEnd": "#555555"
+    }
   }
 }
