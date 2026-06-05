@@ -76,8 +76,15 @@ const commands = [
     name: "/version",
     execute: async (ctx) => {
       const current = getCurrentVersion();
+      const repo = "cons0leweb/Meow-CLI";
+      const releaseUrl = `https://github.com/${repo}/releases/tag/v${current}`;
+      const downloadUrl = `https://github.com/${repo}/releases/latest/download/meow-cli.tar.xz`;
+      
       console.log(`\n  ${ACCENT.bold("🐾 Meow CLI")}  ${MUTED(`v${current}`)}`);
       console.log(`  ${MUTED("─".repeat(30))}`);
+      console.log(`  ${TEXT_DIM("Download:")}  ${ACCENT(downloadUrl)}`);
+      console.log(`  ${TEXT_DIM("Release:")}   ${ACCENT(releaseUrl)}`);
+      
       // Quick async check (fire and forget for display)
       const result = await checkForUpdate();
       if (result.error) {
