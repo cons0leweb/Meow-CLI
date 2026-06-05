@@ -593,7 +593,6 @@ async function deleteFile(p, recursive = false, cfg = {}) {
       fs.unlinkSync(file);
     }
 
-    autoGitCommit(`delete ${desc}`, cfg);
     return success(`✅ Deleted: ${desc}`, null, { changedFiles: [file] });
   } catch (e) { return error(`❌ Delete error: ${e.message}`); }
 }
