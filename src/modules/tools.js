@@ -764,7 +764,7 @@ async function patchFile(p, oldString, newString, cfg = {}) {
   try {
     const file = path.resolve(p);
     if (!fs.existsSync(file) || !fs.statSync(file).isFile()) {
-      return `❌ File not found: ${file}`;
+      return error(`❌ File not found: ${file}`);
     }
 
     const original = fs.readFileSync(file, "utf8");
@@ -783,14 +783,14 @@ async function patchFile(p, oldString, newString, cfg = {}) {
         hint = `\nPossible matches near:\n${candidates.map(c => `  L${c.line}: ${c.text.slice(0, 80)}`).join("\n")}`;
       }
 
-      return `❌ old_string not found in ${describeFileChange(file)}.${hint}\nMake sure the string matches exactly (including whitespace and indentation).`;
+      return error(`❌ old_string not found in ${describeFileChange(file)}.${hint}\nMake sure the string matches exactly (including whitespace and indentation).`);
     }
 
     const secondIndex = original.indexOf(oldString, index + 1);
     if (secondIndex !== -1) {
       const lineNum1 = original.slice(0, index).split("\n").length;
       const lineNum2 = original.slice(0, secondIndex).split("\n").length;
-      return `❌ old_string found multiple times (lines ${lineNum1} and ${lineNum2}). Please provide a more specific/unique string to match.`;
+      return error(`❌ old_string found multiple times (lines ${lineNum1} and ${lineNum2}). Please provide a more specific/unique string to match.`);
     }
 
     const patched = original.slice(0, index) + newString + original.slice(index + oldString.length);
@@ -801,7 +801,7 @@ async function patchFile(p, oldString, newString, cfg = {}) {
       cfg.auto_yes,
       false
     );
-    //if (!approved) return `ℹ Cancelled patch_file for ${desc}.`;
+    //if (!approved) return info(`ℹ Cancelled patch_file for ${desc}.`);
 
     const undoState = loadUndoState();
     undoState.push({ path: file, existed: true, content: original, time: Date.now() });
@@ -812,8 +812,11 @@ async function patchFile(p, oldString, newString, cfg = {}) {
     const lineNum = original.slice(0, index).split("\n").length;
     autoGitCommit(`patch ${desc}`, cfg);
 
-    return `✅ Patched: ${desc} (line ~${lineNum}, ${oldString.split("\n").length} lines → ${newString.split("\n").length} lines)`;
-  } catch (e) { return `❌ Patch error: ${e.message}`; }
+    return success(`✅ Patched: ${desc} (line ~${lineNum}, ${oldString.split("\n").length} lines → ${newString.split("\n").length} lines)`, null, {
+      changedFiles: [file],
+      bytesWritten: Buffer.byteLength(patched, "utf8"),
+    });
+  } catch (e) { return error(`❌ Patch error: ${e.message}`); }
 }
 
 /**
