@@ -568,7 +568,6 @@ async function copyFile(from, to, cfg = {}) {
       fs.copyFileSync(src, dest);
     }
 
-    autoGitCommit(`copy ${descFrom} to ${descTo}`, cfg);
     return success(`✅ Copied: ${descFrom} → ${descTo}`, null, { changedFiles: [dest] });
   } catch (e) { return error(`❌ Copy error: ${e.message}`); }
 }
