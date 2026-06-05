@@ -696,7 +696,7 @@ function listDir(p, recursive = false) {
 function readFile(p, startLine, endLine) {
   try {
     const file = path.resolve(p);
-    if (!fs.existsSync(file) || !fs.statSync(file).isFile()) return `❌ File not found: ${file}`;
+    if (!fs.existsSync(file) || !fs.statSync(file).isFile()) return error(`❌ File not found: ${file}`);
 
     let data = fs.readFileSync(file, "utf8");
 
@@ -706,12 +706,12 @@ function readFile(p, startLine, endLine) {
       const end = Math.min(lines.length, endLine || lines.length);
       const slice = lines.slice(start, end);
       const numbered = slice.map((l, i) => `${String(start + i + 1).padStart(4)} │ ${l}`);
-      return `[Lines ${start + 1}-${end} of ${lines.length}]\n${numbered.join("\n")}`;
+      return success(`[Lines ${start + 1}-${end} of ${lines.length}]`, numbered.join("\n"));
     }
 
     if (data.length > 50000) data = data.slice(0, 50000) + `\n…[TRUNCATED: ${data.length} bytes total]…`;
-    return data;
-  } catch (e) { return `❌ Read error: ${e.message}`; }
+    return success(null, data);
+  } catch (e) { return error(`❌ Read error: ${e.message}`); }
 }
 
 /**
