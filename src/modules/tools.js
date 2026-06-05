@@ -1136,110 +1136,32 @@ async function toolChain(steps, cfg, env) {
 }
 
 /**
- * Main tool execution router.
+ * Main tool execution router — thin dispatcher over ToolRegistry.
  * @param {string} name - Tool name.
  * @param {Object} args - Tool arguments.
  * @param {Object} cfg - Configuration.
  * @param {Object} [env] - Environment.
- * @returns {Promise<string>} Tool output.
+ * @returns {Promise<string>} Tool output (string for backward compat).
  */
 async function executeTool(name, args, cfg, env = process.env) {
   const cleanName = (name || "").replace(/^proxy_/, "");
 
-  switch (cleanName) {
-    case "list_dir": return listDir(args.path, args.recursive);
-    case "read_file": return readFile(args.path, args.start_line, args.end_line);
-    case "write_file": return await writeFile(args.path, args.content, cfg);
-    case "patch_file": return await patchFile(args.path, args.old_string, args.new_string, cfg);
-    case "move_file": return await moveFile(args.from, args.to, cfg);
-    case "copy_file": return await copyFile(args.from, args.to, cfg);
-    case "delete_file": return await deleteFile(args.path, args.recursive, cfg);
-    case "get_system_info": return getSystemInfo();
-    case "find_files": {
-      const { findFiles, indexExists } = await import("./project-index.js");
-      const { formatBytes, timeAgo } = await import("./utils.js");
+  // 1) Dispatch via registry
+  if (toolRegistry.has(cleanName)) {
+    const result = await toolRegistry.execute(cleanName, args, cfg, env);
+    return formatToolResult(result);
+  }
 
-      if (!indexExists()) {
-        return "ℹ Index not found. Run /index rebuild first.";
-      }
-
-      const limit = Math.min(args.limit || 20, 100);
-      const results = await findFiles(args.pattern, { limit });
-
-      if (!results || results.length === 0) return "ℹ No matching files found.";
-      return results.map(f => `${f.path} (${formatBytes(f.size)}, ${timeAgo(f.mtime * 1000)})`).join("\n");
-    }
-    case "grep_search": return grepSearch(args.pattern, args.path, args.include, args.max_results);
-    case "run_shell": return await runShell(args.cmd, cfg, env);
-    case "ask_user": return await askUser(args.question, cfg.auto_yes, args.default || "");
-    case "confirm": return String(await confirmUser(args.message, cfg.auto_yes, args.default));
-    case "choose": return await chooseUser(args.question, args.options, cfg.auto_yes, args.default_index);
-    case "http_request": return await httpRequest(args, cfg);
-    case "web_search": return await webSearch(args, cfg);
-    case "tool_chain": return await toolChain(args.steps, cfg, env);
-    case "delegate_task": {
-      const { delegateTask } = await import("./agents/subagent.js");
-      return await delegateTask(args, cfg);
-    }
-    case "git_diff": {
-      const { gitDiff } = await import("./smart/cicd.js");
-      return gitDiff(args);
-    }
-    case "git_log": {
-      const { gitLog } = await import("./smart/cicd.js");
-      return gitLog(args);
-    }
-    case "git_commit": {
-      const { gitCommit } = await import("./smart/cicd.js");
-      return gitCommit(args);
-    }
-    case "git_branch": {
-      const { gitBranch } = await import("./smart/cicd.js");
-      return gitBranch(args);
-    }
-    case "git_status": {
-      const { gitStatus } = await import("./smart/cicd.js");
-      return gitStatus();
-    }
-    case "ci_pipeline": {
-      const { ciTool } = await import("./smart/cicd.js");
-      return await ciTool(args, cfg);
-    }
-    case "linux_process_list": {
-      const { linuxProcessList } = await import("./linux-sys.js");
-      return linuxProcessList();
-    }
-    case "linux_process_kill": {
-      const { linuxProcessKill } = await import("./linux-sys.js");
-      return await linuxProcessKill(args, cfg);
-    }
-    case "linux_service_control": {
-      const { linuxServiceControl } = await import("./linux-sys.js");
-      return await linuxServiceControl(args, cfg);
-    }
-    case "linux_disk_usage": {
-      const { linuxDiskUsage } = await import("./linux-sys.js");
-      return linuxDiskUsage();
-    }
-    case "linux_net_stat": {
-      const { linuxNetStat } = await import("./linux-sys.js");
-      return linuxNetStat();
-    }
-    case "linux_pkg_manage": {
-      const { linuxPkgManage } = await import("./linux-sys.js");
-      return await linuxPkgManage(args, cfg);
-    }
-    default: {
-      if (cleanName.startsWith("mcp__")) {
-        try {
-          return await mcpManager.executeMcpTool(cleanName, args);
-        } catch (e) {
-          return `❌ MCP Error: ${e.message}`;
-        }
-      }
-      return `❌ Unknown tool: ${name}`;
+  // 2) MCP tools (dynamic namespace)
+  if (cleanName.startsWith("mcp__")) {
+    try {
+      return await mcpManager.executeMcpTool(cleanName, args);
+    } catch (e) {
+      return `❌ MCP Error: ${e.message}`;
     }
   }
+
+  return `❌ Unknown tool: ${name}`;
 }
 
 /**
