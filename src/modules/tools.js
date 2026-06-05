@@ -734,7 +734,7 @@ async function writeFile(p, content, cfg = {}) {
       cfg.auto_yes,
       false
     );
-    //if (!approved) return `ℹ Cancelled write_file for ${desc}.`;
+    //if (!approved) return info(`ℹ Cancelled write_file for ${desc}.`);
 
     const undoState = loadUndoState();
     undoState.push({ path: file, existed, content: old, time: Date.now() });
@@ -745,8 +745,11 @@ async function writeFile(p, content, cfg = {}) {
 
     autoGitCommit(`update ${desc}`, cfg);
 
-    return `✅ Written: ${desc} (${content.length} bytes)`;
-  } catch (e) { return `❌ Write error: ${e.message}`; }
+    return success(`✅ Written: ${desc} (${content.length} bytes)`, null, {
+      changedFiles: [file],
+      bytesWritten: content.length,
+    });
+  } catch (e) { return error(`❌ Write error: ${e.message}`); }
 }
 
 /**
