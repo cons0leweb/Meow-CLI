@@ -561,13 +561,6 @@ async function copyFile(from, to, cfg = {}) {
     const descFrom = describeFileChange(src);
     const descTo = describeFileChange(dest);
 
-    const approved = await confirmUser(
-      `Copy ${descFrom} to ${descTo}?`,
-      cfg.auto_yes,
-      false
-    );
-    // if (!approved) return cancelled(`ℹ Cancelled copy_file.`);
-
     fs.mkdirSync(path.dirname(dest), { recursive: true });
     const stat = fs.statSync(src);
     if (stat.isDirectory()) {
