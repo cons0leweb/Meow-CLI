@@ -712,8 +712,6 @@ async function writeFile(p, content, cfg = {}) {
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(file, content, "utf8");
 
-    autoGitCommit(`update ${desc}`, cfg);
-
     return success(`✅ Written: ${desc} (${content.length} bytes)`, null, {
       changedFiles: [file],
       bytesWritten: content.length,
