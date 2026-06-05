@@ -637,7 +637,7 @@ function getSystemInfo() {
     time: new Date().toISOString(),
     uptime: Math.round(process.uptime()) + "s"
   };
-  return JSON.stringify(info, null, 2);
+  return success("System info", info);
 }
 
 /**
