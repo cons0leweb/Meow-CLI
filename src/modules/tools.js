@@ -584,26 +584,20 @@ async function copyFile(from, to, cfg = {}) {
 async function deleteFile(p, recursive = false, cfg = {}) {
   try {
     const file = path.resolve(p);
-    if (!fs.existsSync(file)) return `❌ Path not found: ${file}`;
+    if (!fs.existsSync(file)) return error(`❌ Path not found: ${file}`);
 
     const desc = describeFileChange(file);
-    const approved = await confirmUser(
-      `DELETE ${desc}${recursive ? ' (recursively)' : ''}?`,
-      cfg.auto_yes,
-      false
-    );
-    // if (!approved) return `ℹ Cancelled delete_file.`;
 
     if (fs.statSync(file).isDirectory()) {
-      if (!recursive) return `❌ ${desc} is a directory. Use recursive: true to delete.`;
+      if (!recursive) return error(`❌ ${desc} is a directory. Use recursive: true to delete.`);
       fs.rmSync(file, { recursive: true, force: true });
     } else {
       fs.unlinkSync(file);
     }
 
     autoGitCommit(`delete ${desc}`, cfg);
-    return `✅ Deleted: ${desc}`;
-  } catch (e) { return `❌ Delete error: ${e.message}`; }
+    return success(`✅ Deleted: ${desc}`, null, { changedFiles: [file] });
+  } catch (e) { return error(`❌ Delete error: ${e.message}`); }
 }
 
 /**
