@@ -563,7 +563,7 @@ async function copyFile(from, to, cfg = {}) {
   try {
     const src = path.resolve(from);
     const dest = path.resolve(to);
-    if (!fs.existsSync(src)) return `❌ Source not found: ${src}`;
+    if (!fs.existsSync(src)) return error(`❌ Source not found: ${src}`);
 
     const descFrom = describeFileChange(src);
     const descTo = describeFileChange(dest);
@@ -573,7 +573,7 @@ async function copyFile(from, to, cfg = {}) {
       cfg.auto_yes,
       false
     );
-    // if (!approved) return `ℹ Cancelled copy_file.`;
+    // if (!approved) return cancelled(`ℹ Cancelled copy_file.`);
 
     fs.mkdirSync(path.dirname(dest), { recursive: true });
     const stat = fs.statSync(src);
@@ -584,8 +584,8 @@ async function copyFile(from, to, cfg = {}) {
     }
 
     autoGitCommit(`copy ${descFrom} to ${descTo}`, cfg);
-    return `✅ Copied: ${descFrom} → ${descTo}`;
-  } catch (e) { return `❌ Copy error: ${e.message}`; }
+    return success(`✅ Copied: ${descFrom} → ${descTo}`, null, { changedFiles: [dest] });
+  } catch (e) { return error(`❌ Copy error: ${e.message}`); }
 }
 
 /**
