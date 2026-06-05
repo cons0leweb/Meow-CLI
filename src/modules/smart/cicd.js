@@ -141,12 +141,13 @@ function detectCIProvider() {
 function listWorkflows() {
   const cwd = process.cwd();
   const provider = detectCIProvider();
-  if (provider !== "github_actions") return { provider, workflows: [] };
+  if (provider !== "github_actions") return { provider, workflows: [], ci_version: CICD_VERSION };
   const dir = path.join(cwd, ".github/workflows");
   try {
     const files = fs.readdirSync(dir).filter(f => f.endsWith(".yml") || f.endsWith(".yaml"));
     return {
       provider,
+      ci_version: CICD_VERSION,
       workflows: files.map(f => {
         try {
           const content = fs.readFileSync(path.join(dir, f), "utf8");
