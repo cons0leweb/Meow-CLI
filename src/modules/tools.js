@@ -537,13 +537,6 @@ async function moveFile(from, to, cfg = {}) {
     const descFrom = describeFileChange(src);
     const descTo = describeFileChange(dest);
 
-    const approved = await confirmUser(
-      `Move/Rename ${descFrom} to ${descTo}?`,
-      cfg.auto_yes,
-      false
-    );
-    // if (!approved) return cancelled(`ℹ Cancelled move_file.`);
-
     fs.mkdirSync(path.dirname(dest), { recursive: true });
     fs.renameSync(src, dest);
 
