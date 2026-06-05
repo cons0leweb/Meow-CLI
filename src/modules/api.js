@@ -53,9 +53,33 @@ function buildSchemaRequest(messages, cfg, options = {}) {
  */
 function buildOpenAIRequest(messages, cfg, options, profile) {
   const url = cfg.api_base + "/chat/completions";
+
+  // Force JSON mode — модель аккуратнее со всеми структурами, включая аргументы tool calls
+  const useJsonMode = profile?.json_mode !== false;
+
+  // When json_mode is active, OpenAI requires the word "json" somewhere in the prompt.
+  // Ensure at least one message includes it.
+  let finalMessages = messages;
+  if (useJsonMode) {
+    const hasJson = messages.some(m => {
+      const content = typeof m.content === "string" ? m.content : JSON.stringify(m.content || "");
+      return content.toLowerCase().includes("json");
+    });
+    if (!hasJson) {
+      // Clone messages and inject "Respond in JSON format." into system message or prepend one
+      finalMessages = messages.map(m => ({ ...m }));
+      const sysMsg = finalMessages.find(m => m.role === "system");
+      if (sysMsg) {
+        sysMsg.content = (sysMsg.content || "") + " Respond in JSON format.";
+      } else {
+        finalMessages.unshift({ role: "system", content: "Respond in JSON format." });
+      }
+    }
+  }
+
   const body = {
     model: cfg.model,
-    messages: messages,
+    messages: finalMessages,
     tools: options.skipTools ? undefined : [
       ...ALL_TOOLS.map(t => ({ type: "function", function: t, strict: true })),
     ],
@@ -64,8 +88,7 @@ function buildOpenAIRequest(messages, cfg, options, profile) {
   if (options.stream) body.stream = true;
   if (options.temperature !== undefined) body.temperature = options.temperature;
   else if (profile?.temperature !== undefined) body.temperature = profile.temperature;
-  // Force JSON mode — модель аккуратнее со всеми структурами, включая аргументы tool calls
-  if (profile?.json_mode !== false) {
+  if (useJsonMode) {
     body.response_format = { type: "json_object" };
   }
 
