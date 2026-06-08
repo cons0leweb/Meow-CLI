@@ -1,7 +1,5 @@
-/**
- * @fileoverview Enhanced Autopilot module v3.0 - Task/Attempt separation
- * @version 3.0.0
- */
+// src/modules/autopilot.js — Упрощённая версия
+// Только надёжное выполнение, никаких экспериментов
 
 import fs from "fs";
 import path from "path";
@@ -17,7 +15,6 @@ import { executeTool, runShell } from "./tools.js";
 import { getTrustManager, TRUST_LEVEL } from "./trust.js";
 import { PromptOptimizer } from "./smart/prompt-optimizer.js";
 import { sanitizeToolCallsForApi } from "./images.js";
-import { compactWithAI, compactMessages } from "./compact.js";
 
 function getAutopilotVersion() {
   try {
@@ -31,24 +28,20 @@ function getAutopilotVersion() {
 
 const AUTOPILOT_VERSION = getAutopilotVersion();
 
+// Упрощённые фазы
 const PHASE = {
-  PLANNING:      "planning",
-  EXECUTION:     "execution",
-  VERIFICATION:  "verification",
-  COMPLETE:      "complete",
-  FAILED:        "failed",
+  PLANNING:     "planning",
+  EXECUTION:    "execution",
+  VERIFICATION: "verification",
+  COMPLETE:     "complete",
+  FAILED:       "failed",
 };
 
-// Simplified task states: PENDING → COMPLETED or FAILED
+// Упрощённые статусы задач
 const TASK_STATUS = {
   PENDING:   "pending",
   COMPLETED: "completed",
   FAILED:    "failed",
-};
-
-const TOOL_OUTCOME = {
-  SUCCESS: "success",
-  FAILURE: "failure",
 };
 
 const PHASE_ICONS = {
@@ -67,44 +60,29 @@ const PHASE_COLORS = {
   [PHASE.FAILED]:       ERROR,
 };
 
+// Упрощённый промпт планировщика
 const PLANNER_SYSTEM_PROMPT = `
-You are a planning agent. Your ONLY job is to produce a structured JSON plan.
-
-Given a task description, you MUST output a JSON object with this exact structure:
+You are a planning agent. Output a JSON plan:
 
 {
   "tasks": [
-    {
-      "description": "Concise description of what to do (one action per task)"
-    }
+    {"description": "Task description"}
   ]
 }
 
-RULES:
-- Each task must be a single, atomic action.
-- Order tasks logically (dependencies first).
-- Do NOT include any text outside the JSON.
-- Do NOT use markdown code fences around the JSON.
-- The JSON must be valid and parseable.
-- Maximum 20 tasks.
-
-Output ONLY the JSON object, nothing else.`;
+Rules:
+- Each task is a single, atomic action
+- Order tasks logically
+- Maximum 20 tasks
+- Output ONLY valid JSON
+`;
 
 function executionPrompt(taskDescription, taskIndex, totalTasks) {
   return `
-You are executing one specific task. Execute ONLY this task, nothing more.
+Execute this task: ${taskDescription} (${taskIndex + 1}/${totalTasks})
 
-CURRENT TASK (${taskIndex + 1}/${totalTasks}):
-${taskDescription}
-
-INSTRUCTIONS:
-- Use tools as needed to complete this ONE task.
-- If a tool fails, try a different approach. Tool errors are NOT task failures.
-- When done, respond with "TASK DONE" and a brief summary.
-- If the task is truly impossible (file missing with no way to create it), respond with "TASK FAILED: <reason>".
-
+Use tools as needed. When done, respond naturally.
 CWD: ${process.cwd()}
-Time: ${new Date().toISOString()}
 `;
 }
 
@@ -115,7 +93,7 @@ function extractFirstValidJson(text) {
   try {
     return JSON.parse(trimmed);
   } catch {
-    // continue to extraction
+    // continue
   }
   
   let startIndex = -1;
@@ -233,7 +211,6 @@ class AutopilotState {
     this.currentTaskIndex = -1;
     this.verificationPassed = false;
     this.verificationOutput = null;
-    this.failedCount = 0;
   }
 
   transition(newPhase, logFn) {
@@ -246,9 +223,7 @@ class AutopilotState {
 
   allTasksCompleted() {
     if (this.tasks.length === 0) return false;
-    return this.tasks.every(t => 
-      t.status === TASK_STATUS.COMPLETED
-    );
+    return this.tasks.every(t => t.status === TASK_STATUS.COMPLETED);
   }
 
   getNextPendingTask() {
@@ -266,17 +241,14 @@ class AutopilotState {
   pendingCount() {
     return this.tasks.filter(t => t.status === TASK_STATUS.PENDING).length;
   }
-
 }
 
+// Упрощённый менеджер контекста
 class ContextManager {
-  constructor(cfg = {}, maxTokens = 4000000) {
+  constructor(cfg = {}, maxTokens = 120000) {
     this.maxTokens = maxTokens;
-    this.warningThreshold = 0.75;
-    this.criticalThreshold = 0.90;
-    this.estimatedTokens = 0;
-    this.compressions = 0;
     this.cfg = cfg;
+    this.compressions = 0;
   }
 
   estimateTokens(messages) {
@@ -286,92 +258,39 @@ class ContextManager {
       total += Math.ceil(content.length / 3.5);
       if (msg.tool_calls) {
         total += msg.tool_calls.length * 50;
-        for (const tc of msg.tool_calls) {
-          total += Math.ceil((tc.function?.arguments || "").length / 3.5);
-        }
       }
     }
-    this.estimatedTokens = total;
     return total;
   }
 
-  getUsageRatio() {
-    return this.estimatedTokens / this.maxTokens;
-  }
-
   needsCompression(messages) {
-    this.estimateTokens(messages);
-    return this.getUsageRatio() > this.warningThreshold;
+    return this.estimateTokens(messages) > this.maxTokens * 0.8;
   }
 
-  needsCriticalCompression(messages) {
-    this.estimateTokens(messages);
-    return this.getUsageRatio() > this.criticalThreshold;
-  }
-
-  async compress(messages) {
+  compress(messages) {
     if (messages.length < 10) return messages;
+    
     this.compressions++;
-
-    if (this.cfg?.api_key) {
-      try {
-        const result = await compactWithAI(messages, this.cfg, 6);
-        if (result.compressed) {
-          this.estimatedTokens = result.after?.tokens || this.estimateTokens(result.messages);
-          log.dim(`Context: ~${result.before?.tokens?.toLocaleString() || "?"} → ~${this.estimatedTokens.toLocaleString()} tokens (AI summary)`);
-          return sanitizeToolCallsForApi(result.messages);
-        }
-      } catch {
-        // fall through
-      }
-    }
-
+    
+    // Простая стратегия: сохраняем систему и последние 12 сообщений
     const systemMsg = messages[0];
-    const recentCount = Math.min(12, Math.floor(messages.length * 0.3));
-    const recentMessages = messages.slice(-recentCount);
-    const oldMessages = messages.slice(1, -recentCount);
-    const summary = this._summarizeMessages(oldMessages);
-
+    const recentMessages = messages.slice(-12);
+    
     const compressed = [
       systemMsg,
-      {
-        role: "user",
-        content: `[CONTEXT COMPRESSION #${this.compressions}]\nPrevious ${oldMessages.length} messages were compressed.\n\n${summary}\n\nContinue from where you left off.`
+      { 
+        role: "user", 
+        content: `[Context compressed #${this.compressions}] Continuing from recent messages.`
       },
       ...recentMessages,
     ];
-
-    const oldTokens = this.estimatedTokens;
-    this.estimateTokens(compressed);
-    log.dim(`Context: ~${oldTokens} → ~${this.estimatedTokens} tokens (${compressed.length} msgs)`);
-
+    
+    log.dim(`Context compressed: ${messages.length} → ${compressed.length} messages`);
     return sanitizeToolCallsForApi(compressed);
-  }
-
-  _summarizeMessages(messages) {
-    const parts = [];
-    let lastAssistant = "";
-    const toolResults = [];
-    const files = new Set();
-
-    for (const msg of messages) {
-      const content = typeof msg.content === "string" ? msg.content : "";
-      if (msg.role === "assistant" && content) lastAssistant = content;
-      if (msg.role === "tool" && content) toolResults.push(content.split("\n")[0].slice(0, 150));
-      const fileMatches = content.match(/(?:\/[\w.-]+)+\.\w+/g) || [];
-      fileMatches.forEach(f => files.add(f));
-    }
-
-    if (toolResults.length > 0) {
-      parts.push(`## Tools (${toolResults.length}):\n${toolResults.slice(-10).map(r => `- ${r}`).join("\n")}`);
-    }
-    if (files.size > 0) parts.push(`## Files: ${[...files].join(", ")}`);
-    if (lastAssistant) parts.push(`## Last state:\n${lastAssistant.slice(0, 500)}`);
-
-    return parts.join("\n\n") || "No significant content.";
   }
 }
 
+// Упрощённый трекер изменений
 class DiffTracker {
   constructor() {
     this.filesCreated = [];
@@ -416,10 +335,10 @@ class DiffTracker {
       parts.push(`📄 Created (${this.filesCreated.length}): ${this.filesCreated.map(f => path.relative(cwd, f)).join(", ")}`);
     }
     if (this.filesModified.length > 0) {
-      parts.push(`✏️  Modified (${this.filesModified.length}): ${this.filesModified.map(f => path.relative(cwd, f)).join(", ")}`);
+      parts.push(`✏️ Modified (${this.filesModified.length}): ${this.filesModified.map(f => path.relative(cwd, f)).join(", ")}`);
     }
     if (this.commandsRun.length > 0) {
-      parts.push(`🖥  Commands (${this.commandsRun.length}): ${this.commandsRun.map(c => c.cmd.slice(0, 60)).join("; ")}`);
+      parts.push(`🖥 Commands (${this.commandsRun.length}): ${this.commandsRun.map(c => c.cmd.slice(0, 60)).join("; ")}`);
     }
     return parts.join("\n") || "No changes tracked.";
   }
@@ -429,86 +348,33 @@ class DiffTracker {
   }
 }
 
+// Упрощённый recovery
 class RecoveryStrategy {
   constructor() {
-    this.errorHistory = [];
     this.retryMap = new Map();
-    this.maxRetriesPerTool = 3;
-    this.backoffMs = 2000;
+    this.maxRetriesPerTool = 2;
+    this.backoffMs = 1000;
   }
 
-  recordError(error, toolName, iteration) {
-    this.errorHistory.push({
-      error: error.message || String(error),
-      tool: toolName,
-      iteration,
-      time: Date.now(),
-    });
+  shouldRetry(toolName) {
+    const count = this.retryMap.get(toolName) || 0;
+    return count < this.maxRetriesPerTool;
+  }
+
+  recordRetry(toolName) {
     const count = (this.retryMap.get(toolName) || 0) + 1;
     this.retryMap.set(toolName, count);
   }
 
-  shouldRetry(toolName) {
-    return (this.retryMap.get(toolName) || 0) < this.maxRetriesPerTool;
-  }
-
   getBackoffMs(toolName) {
     const count = this.retryMap.get(toolName) || 0;
-    return this.backoffMs * Math.pow(2, Math.max(0, count - 1));
+    return this.backoffMs * Math.pow(2, count - 1);
   }
 
   isApiError(error) {
     const msg = error.message || String(error);
-    return /429|rate|500|502|503|timeout|ECONNRESET|fetch failed|socket/i.test(msg);
+    return /429|rate|500|502|503|timeout|ECONNRESET|fetch failed/i.test(msg);
   }
-
-  isToolCallValidationError(error) {
-    const msg = error.message || String(error);
-    return /tool_calls.*must be followed|insufficient tool messages|tool_call_id/i.test(msg);
-  }
-
-  isRetryableToolError(error) {
-    const msg = error.message || String(error);
-    if (/not found|ENOENT|EACCES|EISDIR|EPERM|EEXIST/i.test(msg)) return false;
-    if (/timeout|ECONNRESET|ECONNREFUSED|ETIMEDOUT|EAGAIN|EBUSY/i.test(msg)) return true;
-    return true;
-  }
-
-  getRecoveryHint(error) {
-    const msg = error.message || String(error);
-    if (/429|rate/i.test(msg)) return "Rate limited — backoff";
-    if (/500|502|503/i.test(msg)) return "Server error — retrying";
-    if (/timeout/i.test(msg)) return "Timeout — retrying";
-    if (/context.?length|token/i.test(msg)) return "Context overflow — compressing";
-    if (this.isToolCallValidationError(error)) return "Broken tool call sequence — sanitizing";
-    if (/not found|ENOENT/i.test(msg)) return "File/resource not found — check path";
-    if (/EACCES|EPERM/i.test(msg)) return "Permission denied — access blocked";
-    if (/ENOSPC/i.test(msg)) return "No disk space — cannot write";
-    return "Unknown error — recovering";
-  }
-
-  getErrorSummary() {
-    if (this.errorHistory.length === 0) return "No errors";
-    const grouped = {};
-    for (const e of this.errorHistory) {
-      const key = e.tool || "api";
-      grouped[key] = (grouped[key] || 0) + 1;
-    }
-    return Object.entries(grouped).map(([k, v]) => `${k}:${v}`).join(", ");
-  }
-}
-
-function evaluateToolOutcome(name, result, hasChanges = false) {
-  if (!result) return TOOL_OUTCOME.FAILURE;
-  const r = String(result);
-  
-  
-  if (r.startsWith("❌") || r.includes("Error:") || r.includes("error:")) {
-    return TOOL_OUTCOME.FAILURE;
-  }
-  
-  
-  return TOOL_OUTCOME.SUCCESS;
 }
 
 async function executeToolTracked(name, args, cfg, tracker, recovery, iteration) {
@@ -516,7 +382,7 @@ async function executeToolTracked(name, args, cfg, tracker, recovery, iteration)
   const sandbox = getSandbox();
   const validation = sandbox.validate(name, args);
   if (!validation.allowed) {
-    return { result: `❌ Security: ${validation.reason}`, outcome: TOOL_OUTCOME.FAILURE, changed: false };
+    return { result: `❌ Security: ${validation.reason}`, changed: false };
   }
 
   let changed = false;
@@ -536,13 +402,12 @@ async function executeToolTracked(name, args, cfg, tracker, recovery, iteration)
       changed = true;
     }
     
-    const outcome = evaluateToolOutcome(name, result, changed);
-    return { result, outcome, changed };
+    return { result, changed };
   } catch (e) {
-    recovery.recordError(e, name, iteration);
-    if (recovery.shouldRetry(name) && recovery.isRetryableToolError(e)) {
+    if (recovery.shouldRetry(name) && recovery.isApiError(e)) {
+      recovery.recordRetry(name);
       const backoff = recovery.getBackoffMs(name);
-      log.warn(`${recovery.getRecoveryHint(e)} (retry in ${backoff / 1000}s)`);
+      log.warn(`API error, retry in ${backoff / 1000}s: ${e.message}`);
       await new Promise(r => setTimeout(r, backoff));
       try {
         const result = await executeTool(name, args, cfg);
@@ -550,12 +415,12 @@ async function executeToolTracked(name, args, cfg, tracker, recovery, iteration)
           tracker.trackWrite(args.path);
           changed = true;
         }
-        return { result, outcome: evaluateToolOutcome(name, result, changed), changed };
+        return { result, changed };
       } catch (e2) {
-        return { result: `❌ Tool error after retry: ${e2.message}`, outcome: TOOL_OUTCOME.FAILURE, changed: false };
+        return { result: `❌ Tool error after retry: ${e2.message}`, changed: false };
       }
     }
-    return { result: `❌ Tool error (max retries): ${e.message}`, outcome: TOOL_OUTCOME.FAILURE, changed: false };
+    return { result: `❌ Tool error: ${e.message}`, changed: false };
   }
 }
 
@@ -563,16 +428,7 @@ function detectProjectType() {
   const cwd = process.cwd();
 
   if (fs.existsSync(path.join(cwd, "package.json"))) {
-    try {
-      const pkgContent = fs.readFileSync(path.join(cwd, "package.json"), "utf8");
-      const pkg = JSON.parse(pkgContent);
-      const scripts = pkg.scripts || {};
-      if (scripts.test) return { type: "node", cmd: "npm test" };
-    } catch {
-      log.warn("package.json is invalid, falling back to default test command");
-      return { type: "node", cmd: "node --test" };
-    }
-    return { type: "node", cmd: "node --test" };
+    return { type: "node", cmd: "npm test" };
   }
 
   if (fs.existsSync(path.join(cwd, "pyproject.toml")) || fs.existsSync(path.join(cwd, "requirements.txt"))) {
@@ -594,13 +450,11 @@ class Planner {
   constructor(cfg) {
     this.cfg = cfg;
     this.maxRetries = 3;
+    this.maxTasks = 15;
   }
 
   async plan(task) {
-    const complexity = estimateComplexity(task);
-    const maxTasks = complexity.suggestedMaxTasks;
-    
-    const plannerPrompt = PLANNER_SYSTEM_PROMPT + `\n\nIMPORTANT: Create at most ${maxTasks} tasks. Each task MUST include targetFiles array and successCriteria string.`;
+    const plannerPrompt = PLANNER_SYSTEM_PROMPT + `\n\nIMPORTANT: Create at most ${this.maxTasks} tasks.`;
     
     const messages = [
       { role: "system", content: plannerPrompt },
@@ -623,20 +477,16 @@ class Planner {
       return [];
     }
     
-    return this._parsePlan(parsed, task);
+    return this._parsePlan(parsed);
   }
 
-  _parsePlan(parsed, originalTask) {
-    const tasks = (parsed.tasks || []).map((t, i) => {
-      return {
-        id: `task-${i + 1}`,
-        description: t.description || String(t),
-        status: TASK_STATUS.PENDING,
-        result: null,
-        attempts: 0,
-        maxAttempts: 10
-      };
-    });
+  _parsePlan(parsed) {
+    const tasks = (parsed.tasks || []).map((t, i) => ({
+      id: `task-${i + 1}`,
+      description: t.description || String(t),
+      status: TASK_STATUS.PENDING,
+      result: null,
+    }));
     return tasks;
   }
 }
@@ -654,57 +504,22 @@ class Executor {
   }
 
   async execute(task, taskIndex, totalTasks, sharedMessages) {
+    task.status = TASK_STATUS.PENDING;
     this.logFn("task_start", `${task.id}: ${task.description}`);
     
-    const maxAttempts = task.maxAttempts || 10;
-    let attempt = 0;
-    
-    while (attempt < maxAttempts) {
-      attempt++;
-      this.logFn("attempt_start", `Attempt ${attempt}/${maxAttempts}`);
-      
-      const attemptResult = await this._executeAttempt(task, taskIndex, totalTasks, sharedMessages, attempt);
-      
-      if (attemptResult.completed) {
-        task.status = TASK_STATUS.COMPLETED;
-        task.result = attemptResult.result;
-        this.logFn("task_end", `${task.id}: COMPLETED after ${attempt} attempts`);
-        return { status: TASK_STATUS.COMPLETED, result: attemptResult.result, messages: attemptResult.messages };
-      }
-      
-      this.logFn("attempt_failure", `Attempt ${attempt} failed: ${attemptResult.reason || "unknown"}`);
-    }
-    
-    // Исчерпан лимит попыток — задача FAILED
-    task.status = TASK_STATUS.FAILED;
-    task.result = `Failed after ${maxAttempts} unsuccessful attempts`;
-    this.logFn("task_failed", `${task.id}: FAILED after ${maxAttempts} attempts`);
-    return { status: TASK_STATUS.FAILED, result: task.result, messages: sharedMessages };
-  }
-  
-  async _executeAttempt(task, taskIndex, totalTasks, sharedMessages, attemptNumber) {
     let executionMessages = [
       ...sharedMessages,
       { role: "user", content: executionPrompt(task.description, taskIndex, totalTasks) },
     ];
 
-    let hasRealToolCalls = false;
-    let hasRealChanges = false;
-    let successfulToolResults = 0;
-    let filesCreatedBefore = this.tracker.filesCreated.length;
-    let filesModifiedBefore = this.tracker.filesModified.length;
     let localIterations = 0;
-    const maxLocalIterations = 10;
+    const maxLocalIterations = 20;
     
     while (localIterations < maxLocalIterations) {
       localIterations++;
 
-      if (this.contextManager.needsCriticalCompression(executionMessages)) {
-        log.warn("Context critical — compressing");
-        executionMessages = await this.contextManager.compress(executionMessages);
-        executionMessages = sanitizeToolCallsForApi(executionMessages);
-      } else if (this.contextManager.needsCompression(executionMessages)) {
-        executionMessages = await this.contextManager.compress(executionMessages);
+      if (this.contextManager.needsCompression(executionMessages)) {
+        executionMessages = this.contextManager.compress(executionMessages);
         executionMessages = sanitizeToolCallsForApi(executionMessages);
       }
 
@@ -718,18 +533,21 @@ class Executor {
           await new Promise(r => setTimeout(r, 2000));
           continue;
         }
-        return { completed: false, partial: false, reason: `API error: ${e.message}`, messages: executionMessages };
+        task.status = TASK_STATUS.FAILED;
+        task.result = `API error: ${e.message}`;
+        return { status: TASK_STATUS.FAILED, result: task.result, messages: executionMessages };
       }
 
       const msg = data.choices?.[0]?.message;
       if (!msg) {
-        return { completed: false, partial: false, reason: "Empty API response", messages: executionMessages };
+        task.status = TASK_STATUS.FAILED;
+        task.result = "Empty API response";
+        return { status: TASK_STATUS.FAILED, result: task.result, messages: executionMessages };
       }
 
       if (msg.tool_calls && msg.tool_calls.length > 0) {
         executionMessages.push(msg);
         this.toolCalls += msg.tool_calls.length;
-        hasRealToolCalls = true;
 
         for (const call of msg.tool_calls) {
           const name = call.function.name;
@@ -739,8 +557,8 @@ class Executor {
           printToolExecution(name, args, 0, 1);
           this.logFn("tool_call", `${name}: ${JSON.stringify(args).slice(0, 300)}`);
 
-          const { result, outcome, changed } = await executeToolTracked(
-            name, args, this.cfg, this.tracker, this.recovery, attemptNumber
+          const { result, changed } = await executeToolTracked(
+            name, args, this.cfg, this.tracker, this.recovery, localIterations
           );
 
           if (this.cfg.autopilot?.verbose !== false) {
@@ -748,11 +566,6 @@ class Executor {
           }
 
           this.logFn("tool_result", `${name}: ${(result || "").slice(0, 500)}`);
-
-          if (outcome !== TOOL_OUTCOME.FAILURE) {
-            successfulToolResults++;
-            if (changed) hasRealChanges = true;
-          }
 
           executionMessages.push({
             role: "tool",
@@ -763,35 +576,21 @@ class Executor {
         continue;
       }
 
+      // Нет tool_calls — задача завершена
       const content = msg.content || "";
       executionMessages.push(msg);
-
-      const hasCompletionMarker = /TASK\s+DONE/i.test(content);
-      const hasFailedMarker = /TASK\s+FAILED/i.test(content);
       
-      const filesCreatedNow = this.tracker.filesCreated.length - filesCreatedBefore;
-      const filesModifiedNow = this.tracker.filesModified.length - filesModifiedBefore;
-      const hasAnyProgress = hasRealToolCalls || hasRealChanges || successfulToolResults > 0 || filesCreatedNow > 0 || filesModifiedNow > 0;
-      
-      if (hasCompletionMarker) {
-        if (hasAnyProgress) {
-          return { completed: true, result: content, messages: executionMessages };
-        } else {
-          return { completed: false, reason: "Completion marker without evidence", messages: executionMessages };
-        }
-      }
-      
-      if (hasFailedMarker) {
-        return { completed: false, reason: "Task reported FAILED", messages: executionMessages };
-      }
-      
-      // Без маркеров, нет прогресса — пустая попытка
-      if (localIterations >= 2 && !msg.tool_calls && !hasAnyProgress) {
-        return { completed: false, reason: "No progress and no completion marker", messages: executionMessages };
-      }
+      task.status = TASK_STATUS.COMPLETED;
+      task.result = content;
+      this.logFn("task_end", `${task.id}: COMPLETED after ${localIterations} iterations`);
+      return { status: TASK_STATUS.COMPLETED, result: content, messages: executionMessages };
     }
     
-    return { completed: false, reason: `No completion after ${maxLocalIterations} iterations`, messages: executionMessages };
+    // Достигнут максимум итераций
+    task.status = TASK_STATUS.FAILED;
+    task.result = `Maximum iterations (${maxLocalIterations}) reached without completion`;
+    this.logFn("task_failed", `${task.id}: FAILED`);
+    return { status: TASK_STATUS.FAILED, result: task.result, messages: executionMessages };
   }
 }
 
@@ -853,11 +652,6 @@ class Verifier {
   }
 }
 
-function printToolCallBlock(calls) {
-  const count = calls.length;
-  console.log(`  ${TOOL_CLR}┃${C.reset} ${TOOL_CLR}${C.bold}Tools${C.reset} ${MUTED}(${count} call${count > 1 ? "s" : ""})${C.reset}`);
-}
-
 function printToolExecution(name, args, index, total) {
   const argsStr = typeof args === "string" ? args : JSON.stringify(args);
   const short = argsStr.length > 60 ? argsStr.slice(0, 57) + "…" : argsStr;
@@ -902,20 +696,6 @@ function printStatusBar(ap, state) {
   console.log(`\n  ${parts.join(`  ${MUTED}·${C.reset}  `)}`);
 }
 
-function printCompactResponse(content, state, iteration) {
-  if (!content || content.trim().length === 0) return;
-  const phaseColor = PHASE_COLORS[state.phase] || AI_CLR;
-  const phaseIcon = PHASE_ICONS[state.phase] || "💭";
-
-  console.log("");
-  console.log(`  ${phaseColor}${C.bold}${phaseIcon} Assistant${C.reset} ${MUTED}[iter ${iteration}]${C.reset}`);
-
-  const output = renderMD(content).trim();
-  for (const line of output.split("\n")) {
-    console.log(`  ${line}`);
-  }
-}
-
 class Autopilot {
   constructor(cfg, messages, saveCallback) {
     this.cfg = cfg;
@@ -932,7 +712,6 @@ class Autopilot {
     this.originalGoal = "";
 
     this.state = new AutopilotState();
-
     this.contextManager = new ContextManager(cfg, cfg.autopilot?.max_context_tokens || 120000);
     this.diffTracker = new DiffTracker();
     this.recovery = new RecoveryStrategy();
@@ -974,7 +753,6 @@ class Autopilot {
       `${MUTED}Model:${C.reset}        ${ACCENT}${this.cfg.model}${C.reset}`,
       `${MUTED}Version:${C.reset}      ${TEXT_DIM}v${AUTOPILOT_VERSION}${C.reset}`,
       `${MUTED}Max iters:${C.reset}    ${TEXT}${this.maxIterations}${C.reset}`,
-      `${MUTED}Max attempts/task:${C.reset} ${TEXT}10${C.reset}`,
       `${MUTED}Auto-confirm:${C.reset} ${SUCCESS}ON${C.reset}`,
       ``,
       `${TEXT_DIM}Press ${C.bold}Ctrl+C${C.reset}${TEXT_DIM} to stop gracefully${C.reset}`,
@@ -986,7 +764,6 @@ class Autopilot {
   _printSummary(reason) {
     const elapsed = formatDuration(Date.now() - this.startTime);
     const diffSummary = this.diffTracker.getSummary();
-    const errorSummary = this.recovery.getErrorSummary();
 
     const lines = [
       `${C.bold}Status:${C.reset}       ${reason}`,
@@ -994,7 +771,7 @@ class Autopilot {
       `${C.bold}Tasks:${C.reset}        ${this.state.completedCount()} completed, ${this.state.failedCount()} failed, ${this.state.pendingCount()} pending`,
       `${C.bold}Iterations:${C.reset}   ${this.iteration} / ${this.maxIterations}`,
       `${C.bold}Tool calls:${C.reset}   ${this.toolCalls}`,
-      `${C.bold}Errors:${C.reset}       ${this.errors}${this.errors > 0 ? ` (${errorSummary})` : ""}`,
+      `${C.bold}Errors:${C.reset}       ${this.errors}`,
       `${C.bold}Duration:${C.reset}     ${elapsed}`,
       ``,
       `${C.bold}Changes:${C.reset}`,
@@ -1011,7 +788,6 @@ class Autopilot {
         
         const desc = t.description.length > 80 ? t.description.slice(0, 77) + "…" : t.description;
         lines.push(`  ${icon} ${TEXT_DIM}${desc}${C.reset}`);
-
       }
     }
 
@@ -1027,7 +803,7 @@ class Autopilot {
       const ts = new Date().toISOString().replace(/[:.]/g, "-");
       const logFile = path.join(LOG_DIR, `autopilot-${ts}.json`);
       fs.writeFileSync(logFile, JSON.stringify({
-        version: 6,
+        version: 7,
         startTime: new Date(this.startTime).toISOString(),
         endTime: new Date().toISOString(),
         duration: formatDuration(Date.now() - this.startTime),
@@ -1041,8 +817,6 @@ class Autopilot {
           id: t.id,
           description: t.description,
           status: t.status,
-          attempts: t.attempts,
-          maxAttempts: t.maxAttempts,
           result: (t.result || "").slice(0, 500),
         })),
         changes: {
@@ -1051,7 +825,6 @@ class Autopilot {
           commands: this.diffTracker.commandsRun.length,
         },
         compressions: this.contextManager.compressions,
-        errorSummary: this.recovery.getErrorSummary(),
         entries: this.logEntries,
       }, null, 2));
       log.dim(`Log saved: ${logFile}`);
@@ -1096,10 +869,6 @@ class Autopilot {
     }
 
     const origAutoYes = this.cfg.auto_yes;
-    if (!origAutoYes) {
-      log.warn("AUTOPILOT: Enabling auto-confirm (auto_yes=true) for autonomous execution");
-      log.warn("AUTOPILOT: Only use this if you trust the LLM completely");
-    }
     this.cfg.auto_yes = true;
 
     this._printHeader(task);
@@ -1129,11 +898,6 @@ class Autopilot {
           this.iteration++;
           printStatusBar(this, this.state);
 
-          if (this.state.allTasksCompleted()) {
-            this._log("all_tasks_complete", `All tasks completed or replaced`);
-            break;
-          }
-
           const pendingTask = this.state.getNextPendingTask();
           if (!pendingTask) {
             if (this.state.allTasksCompleted()) break;
@@ -1143,7 +907,7 @@ class Autopilot {
           this.state.transition(PHASE.EXECUTION, (t, m) => this._log(t, m));
           this.state.currentTaskIndex = this.state.tasks.indexOf(pendingTask);
 
-          log.auto(`⚡ EXECUTING: ${pendingTask.description.slice(0, 100)} (max attempts: ${pendingTask.maxAttempts || 10})`);
+          log.auto(`⚡ EXECUTING: ${pendingTask.description.slice(0, 100)}`);
 
           const execResult = await this.executor.execute(
             pendingTask,
@@ -1249,7 +1013,6 @@ export {
   RecoveryStrategy,
   PHASE,
   TASK_STATUS,
-  TOOL_OUTCOME,
   AUTOPILOT_VERSION,
   detectProjectType,
   parseStructuredResponse,

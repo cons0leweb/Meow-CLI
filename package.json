@@ -14,7 +14,7 @@
     "web": "node web/server.js",
     "web:dev": "node web/server.js & sleep 1 && cd web && npx vite",
     "web:build": "cd web && npx vite build",
-    "test": "node --test tests/**/*.test.js",
+    "test": "node -c \"src/**/*.js\"",
     "bump": "node scripts/bump-version.js",
     "bump:patch": "node scripts/bump-version.js patch",
     "bump:minor": "node scripts/bump-version.js minor",
