@@ -40,19 +40,15 @@ const PHASE = {
   FAILED:        "failed",
 };
 
-// Task states — FAILED удалён
+// Simplified task states: PENDING → COMPLETED or FAILED
 const TASK_STATUS = {
   PENDING:   "pending",
-  RUNNING:   "running",
   COMPLETED: "completed",
-  PARTIAL:   "partial",
-  BLOCKED:   "blocked",
-  REPLACED:  "replaced",
+  FAILED:    "failed",
 };
 
 const TOOL_OUTCOME = {
   SUCCESS: "success",
-  PARTIAL: "partial",
   FAILURE: "failure",
 };
 
@@ -64,7 +60,6 @@ const COMPLEXITY_MODE = {
 const PHASE_ICONS = {
   [PHASE.PLANNING]:     "📋",
   [PHASE.EXECUTION]:    "⚡",
-  [PHASE.REPLANNING]:   "🔧",
   [PHASE.VERIFICATION]: "🔍",
   [PHASE.COMPLETE]:     "✅",
   [PHASE.FAILED]:       "❌",
@@ -73,7 +68,6 @@ const PHASE_ICONS = {
 const PHASE_COLORS = {
   [PHASE.PLANNING]:     INFO,
   [PHASE.EXECUTION]:    AUTO_CLR,
-  [PHASE.REPLANNING]:   WARNING,
   [PHASE.VERIFICATION]: ACCENT2,
   [PHASE.COMPLETE]:     SUCCESS,
   [PHASE.FAILED]:       ERROR,
@@ -117,33 +111,14 @@ INSTRUCTIONS:
 - Use tools as needed to complete this ONE task.
 - If a tool fails, try a different approach. Tool errors are NOT task failures.
 - When done, respond with "TASK DONE" and a brief summary.
-- If you made progress but the task is not complete, respond with "TASK PARTIAL: <what was done> + <what remains>".
-- If the task is truly impossible (file missing with no way to create it), respond with "TASK BLOCKED: <reason>".
+- If the task is truly impossible (file missing with no way to create it), respond with "TASK FAILED: <reason>".
 
 CWD: ${process.cwd()}
 Time: ${new Date().toISOString()}
 `;
 }
 
-const REPLANNER_SYSTEM_PROMPT = `
-You are a replanning agent. A task has become BLOCKED after exhausting attempts.
 
-Given the blocked task description and the error, output a JSON object with replacement tasks:
-
-{
-  "replacement_tasks": [
-    {
-      "description": "New task to fix or work around the blockage",
-      "targetFiles": ["file1.js"],
-      "successCriteria": "Clear condition that proves task completion"
-    }
-  ]
-}
-
-RULES:
-- Only create replacement tasks if the original task is truly blocked.
-- You may create 1-5 replacement tasks.
-- Output ONLY the JSON object.`;
 
 function extractFirstValidJson(text) {
   if (!text || typeof text !== "string") return null;
@@ -410,29 +385,7 @@ function isRelevantFileChange(taskDescription, targetFiles, actualFile) {
   return false;
 }
 
-function calculateTaskRelevanceScore(taskDesc, originalGoal) {
-  if (!originalGoal) return 1;
-  
-  const taskLower = taskDesc.toLowerCase();
-  const goalLower = originalGoal.toLowerCase();
-  
-  let score = 0;
-  
-  const goalWords = goalLower.split(/\s+/);
-  const commonWords = goalWords.filter(word => word.length > 2 && taskLower.includes(word));
-  score += (commonWords.length / Math.max(1, goalWords.length)) * 0.5;
-  
-  const fileGoalMatches = goalLower.match(/(?:[\w.-]+\.\w+)/g) || [];
-  const fileTaskMatches = taskLower.match(/(?:[\w.-]+\.\w+)/g) || [];
-  const commonFiles = fileGoalMatches.filter(f => fileTaskMatches.includes(f));
-  score += (commonFiles.length / Math.max(1, fileGoalMatches.length)) * 0.3;
-  
-  const goalNouns = goalWords.filter(w => w.length > 3 && !['this', 'that', 'these', 'those', 'then', 'there', 'should', 'could', 'would'].includes(w));
-  const matches = goalNouns.filter(word => taskLower.includes(word)).length;
-  score += (matches / Math.max(1, goalNouns.length)) * 0.2;
-  
-  return Math.min(score, 1.0);
-}
+
 
 class AutopilotState {
   constructor() {
@@ -441,12 +394,7 @@ class AutopilotState {
     this.currentTaskIndex = -1;
     this.verificationPassed = false;
     this.verificationOutput = null;
-    this.replanCount = 0;
-    this.maxReplans = 5;
-    this.stallCounter = 0;
-    this.maxStalls = 3;
-    this.consecutiveReplanFailures = 0;
-    this.maxConsecutiveReplanFailures = 3;
+    this.failedCount = 0;
   }
 
   transition(newPhase, logFn) {
@@ -460,17 +408,11 @@ class AutopilotState {
   allTasksCompleted() {
     if (this.tasks.length === 0) return false;
     return this.tasks.every(t => 
-      t.status === TASK_STATUS.COMPLETED || t.status === TASK_STATUS.REPLACED
+      t.status === TASK_STATUS.COMPLETED
     );
   }
 
-  hasBlockedTask() {
-    return this.tasks.some(t => t.status === TASK_STATUS.BLOCKED);
-  }
 
-  getBlockedTask() {
-    return this.tasks.find(t => t.status === TASK_STATUS.BLOCKED) || null;
-  }
 
   getNextPendingTask() {
     return this.tasks.find(t => t.status === TASK_STATUS.PENDING) || null;
@@ -480,30 +422,18 @@ class AutopilotState {
     return this.tasks.filter(t => t.status === TASK_STATUS.COMPLETED).length;
   }
 
-  replacedCount() {
-    return this.tasks.filter(t => t.status === TASK_STATUS.REPLACED).length;
-  }
 
-  blockedCount() {
-    return this.tasks.filter(t => t.status === TASK_STATUS.BLOCKED).length;
+
+  failedCount() {
+    return this.tasks.filter(t => t.status === TASK_STATUS.FAILED).length;
   }
 
   pendingCount() {
     return this.tasks.filter(t => t.status === TASK_STATUS.PENDING).length;
   }
 
-  partialCount() {
-    return this.tasks.filter(t => t.status === TASK_STATUS.PARTIAL).length;
-  }
 
-  recordReplanFailure() {
-    this.consecutiveReplanFailures++;
-    return this.consecutiveReplanFailures >= this.maxConsecutiveReplanFailures;
-  }
 
-  resetReplanFailures() {
-    this.consecutiveReplanFailures = 0;
-  }
 }
 
 class ContextManager {
@@ -739,15 +669,11 @@ function evaluateToolOutcome(name, result, hasChanges = false) {
   if (!result) return TOOL_OUTCOME.FAILURE;
   const r = String(result);
   
-  if (hasChanges) return TOOL_OUTCOME.PARTIAL;
   
   if (r.startsWith("❌") || r.includes("Error:") || r.includes("error:")) {
     return TOOL_OUTCOME.FAILURE;
   }
   
-  if (r.startsWith("ℹ") && (r.includes("not found") || r.includes("No "))) {
-    return TOOL_OUTCOME.PARTIAL;
-  }
   
   return TOOL_OUTCOME.SUCCESS;
 }
@@ -922,13 +848,12 @@ class Executor {
   }
 
   async execute(task, taskIndex, totalTasks, sharedMessages) {
-    task.status = TASK_STATUS.RUNNING;
     this.logFn("task_start", `${task.id}: ${task.description}`);
     
     const maxAttempts = task.maxAttempts || 10;
     let attempt = 0;
     
-    while (attempt < maxAttempts && task.status === TASK_STATUS.RUNNING) {
+    while (attempt < maxAttempts) {
       attempt++;
       this.logFn("attempt_start", `Attempt ${attempt}/${maxAttempts}`);
       
@@ -941,25 +866,14 @@ class Executor {
         return { status: TASK_STATUS.COMPLETED, result: attemptResult.result, messages: attemptResult.messages };
       }
       
-      // PARTIAL — прогресс есть, но задача не завершена
-      if (attemptResult.partial) {
-        task.status = TASK_STATUS.PARTIAL;
-        task.result = attemptResult.result;
-        this.logFn("task_partial", `${task.id}: PARTIAL after ${attempt} attempts`);
-        // PARTIAL не триггерит replanner — просто продолжаем
-        return { status: TASK_STATUS.PARTIAL, result: attemptResult.result, messages: attemptResult.messages };
-      }
-      
-      // Ошибка инструмента или пустая попытка — просто логируем и продолжаем
       this.logFn("attempt_failure", `Attempt ${attempt} failed: ${attemptResult.reason || "unknown"}`);
-      // Задача остаётся RUNNING
     }
     
-    // Исчерпан лимит попыток — задача BLOCKED
-    task.status = TASK_STATUS.BLOCKED;
-    task.result = `Blocked after ${maxAttempts} unsuccessful attempts`;
-    this.logFn("task_blocked", `${task.id}: BLOCKED after ${maxAttempts} attempts`);
-    return { status: TASK_STATUS.BLOCKED, result: task.result, messages: sharedMessages };
+    // Исчерпан лимит попыток — задача FAILED
+    task.status = TASK_STATUS.FAILED;
+    task.result = `Failed after ${maxAttempts} unsuccessful attempts`;
+    this.logFn("task_failed", `${task.id}: FAILED after ${maxAttempts} attempts`);
+    return { status: TASK_STATUS.FAILED, result: task.result, messages: sharedMessages };
   }
   
   async _executeAttempt(task, taskIndex, totalTasks, sharedMessages, attemptNumber) {
@@ -1052,132 +966,35 @@ class Executor {
       executionMessages.push(msg);
 
       const hasCompletionMarker = /TASK\s+DONE/i.test(content);
-      const hasPartialMarker = /TASK\s+PARTIAL/i.test(content);
-      const hasBlockedMarker = /TASK\s+BLOCKED/i.test(content);
+      const hasFailedMarker = /TASK\s+FAILED/i.test(content);
       
       const filesCreatedNow = this.tracker.filesCreated.length - filesCreatedBefore;
       const filesModifiedNow = this.tracker.filesModified.length - filesModifiedBefore;
       const hasAnyProgress = hasRealToolCalls || hasRealChanges || successfulToolResults > 0 || filesCreatedNow > 0 || filesModifiedNow > 0;
       
       if (hasCompletionMarker) {
-        const hasEvidence = hasAnyProgress;
-        if (hasEvidence) {
-          return { completed: true, partial: false, result: content, messages: executionMessages };
+        if (hasAnyProgress) {
+          return { completed: true, result: content, messages: executionMessages };
         } else {
-          // Нет доказательств — считаем это неудачной попыткой
-          return { completed: false, partial: false, reason: "Completion marker without evidence", messages: executionMessages };
+          return { completed: false, reason: "Completion marker without evidence", messages: executionMessages };
         }
       }
       
-      if (hasPartialMarker || (hasAnyProgress && !hasCompletionMarker)) {
-        return { completed: false, partial: true, result: content, messages: executionMessages };
-      }
-      
-      if (hasBlockedMarker) {
-        return { completed: false, partial: false, reason: "Task reported BLOCKED", messages: executionMessages };
+      if (hasFailedMarker) {
+        return { completed: false, reason: "Task reported FAILED", messages: executionMessages };
       }
       
       // Без маркеров, нет прогресса — пустая попытка
       if (localIterations >= 2 && !msg.tool_calls && !hasAnyProgress) {
-        return { completed: false, partial: false, reason: "No progress and no completion marker", messages: executionMessages };
+        return { completed: false, reason: "No progress and no completion marker", messages: executionMessages };
       }
     }
     
-    // Исчерпан лимит итераций для этой попытки
-    const finalProgress = (this.tracker.filesCreated.length - filesCreatedBefore) > 0 ||
-                         (this.tracker.filesModified.length - filesModifiedBefore) > 0 ||
-                         successfulToolResults > 0;
-    
-    if (finalProgress) {
-      return { completed: false, partial: true, result: `Partial progress after ${maxLocalIterations} iterations`, messages: executionMessages };
-    }
-    
-    return { completed: false, partial: false, reason: `No progress after ${maxLocalIterations} iterations`, messages: executionMessages };
+    return { completed: false, reason: `No completion after ${maxLocalIterations} iterations`, messages: executionMessages };
   }
 }
 
-class Replanner {
-  constructor(cfg) {
-    this.cfg = cfg;
-    this.maxRetries = 3;
-  }
 
-  async replan(blockedTask, remainingTasks, originalGoal = "", completedTasks = []) {
-    const context = [
-      `Original goal: ${originalGoal}`,
-      ``,
-      `Blocked task: ${blockedTask.description}`,
-      `Error/Result: ${blockedTask.result || "Unknown error"}`,
-      `Attempts made: ${blockedTask.attempts || 0}`,
-      ``,
-      `Completed tasks (${completedTasks.length}):`,
-      ...completedTasks.map(t => `✅ ${t.description}`),
-      ``,
-      `Remaining tasks (${remainingTasks.length}):`,
-      ...remainingTasks.map(t => `⏳ ${t.description}`),
-    ].join("\n");
-
-    const messages = [
-      { role: "system", content: REPLANNER_SYSTEM_PROMPT },
-      { role: "user", content: `A task has become BLOCKED. Create replacement tasks.\n\n${context}` },
-    ];
-
-    let rawResponse = "";
-    try {
-      const data = await callApi(messages, this.cfg);
-      rawResponse = data.choices?.[0]?.message?.content || "";
-    } catch (e) {
-      log.err(`Replanner API call failed: ${e.message}`);
-      return [];
-    }
-
-    const parsed = await parseStructuredResponse(rawResponse, this.cfg, log.dim, this.maxRetries, "replanning");
-    
-    if (!parsed) {
-      log.err(`Replanner failed to produce valid JSON after ${this.maxRetries} attempts`);
-      return [];
-    }
-    
-    return this._parseReplan(parsed, originalGoal);
-  }
-
-  _parseReplan(parsed, originalGoal) {
-    const replacements = (parsed.replacement_tasks || []).map((t, i) => {
-      let targetFiles = t.targetFiles || [];
-      let successCriteria = t.successCriteria || "";
-      
-      if (targetFiles.length === 0) {
-        targetFiles = extractTargetFilesFromDescription(t.description || String(t));
-      }
-      
-      if (!successCriteria) {
-        successCriteria = extractSuccessCriteriaFromDescription(t.description || String(t));
-      }
-      
-      return {
-        id: `replan-${Date.now()}-${i + 1}`,
-        description: t.description || String(t),
-        status: TASK_STATUS.PENDING,
-        result: null,
-        attempts: 0,
-        maxAttempts: 10,
-        successCriteria: successCriteria,
-        targetFiles: targetFiles
-      };
-    });
-    
-    const filtered = replacements.filter(task => {
-      const score = calculateTaskRelevanceScore(task.description, originalGoal);
-      const isRelevant = score >= 0.3;
-      if (!isRelevant) {
-        log.warn(`Replanner generated irrelevant task: "${task.description.slice(0, 50)}" - relevance score: ${score.toFixed(2)} (needs >=0.3)`);
-      }
-      return isRelevant;
-    });
-    
-    return filtered;
-  }
-}
 
 class Verifier {
   constructor() {
@@ -1279,7 +1096,7 @@ function printStatusBar(ap, state) {
     `${TOOL_CLR}⚡${ap.toolCalls}${C.reset}`,
     `${ap.errors > 0 ? ERROR : MUTED}✗${ap.errors}${C.reset}`,
     `${MUTED}Δ${ap.diffTracker.getTotalChanges()}${C.reset}`,
-    `${MUTED}c${state.completedCount()}/p${state.partialCount()}/b${state.blockedCount()}/${state.tasks.length}${C.reset}`,
+    `${MUTED}c${state.completedCount()}/f${state.failedCount()}/${state.tasks.length}${C.reset}`,
     `${TEXT_DIM}${elapsed}${C.reset}`,
   ];
 
@@ -1329,7 +1146,6 @@ class Autopilot {
     this.verbose = apCfg.verbose !== false;
 
     this.planner = new Planner(cfg);
-    this.replanner = new Replanner(cfg);
     this.verifier = new Verifier();
     this.executor = null;
   }
@@ -1376,11 +1192,10 @@ class Autopilot {
     const lines = [
       `${C.bold}Status:${C.reset}       ${reason}`,
       `${C.bold}Phase:${C.reset}        ${this.state.phase}`,
-      `${C.bold}Tasks:${C.reset}        ${this.state.completedCount()} completed, ${this.state.partialCount()} partial, ${this.state.blockedCount()} blocked, ${this.state.replacedCount()} replaced, ${this.state.pendingCount()} pending`,
+      `${C.bold}Tasks:${C.reset}        ${this.state.completedCount()} completed, ${this.state.failedCount()} failed, ${this.state.pendingCount()} pending`,
       `${C.bold}Iterations:${C.reset}   ${this.iteration} / ${this.maxIterations}`,
       `${C.bold}Tool calls:${C.reset}   ${this.toolCalls}`,
       `${C.bold}Errors:${C.reset}       ${this.errors}${this.errors > 0 ? ` (${errorSummary})` : ""}`,
-      `${C.bold}Replans:${C.reset}      ${this.state.replanCount}`,
       `${C.bold}Duration:${C.reset}     ${elapsed}`,
       ``,
       `${C.bold}Changes:${C.reset}`,
@@ -1392,10 +1207,7 @@ class Autopilot {
       for (const t of this.state.tasks) {
         let icon = "";
         if (t.status === TASK_STATUS.COMPLETED) icon = "✅";
-        else if (t.status === TASK_STATUS.PARTIAL) icon = "🟡";
-        else if (t.status === TASK_STATUS.BLOCKED) icon = "🚫";
-        else if (t.status === TASK_STATUS.REPLACED) icon = "🔄";
-        else if (t.status === TASK_STATUS.RUNNING) icon = "▶️";
+        else if (t.status === TASK_STATUS.FAILED) icon = "❌";
         else icon = "⏳";
         
         const desc = t.description.length > 80 ? t.description.slice(0, 77) + "…" : t.description;
@@ -1427,7 +1239,6 @@ class Autopilot {
         errors: this.errors,
         model: this.cfg.model,
         phase: this.state.phase,
-        replans: this.state.replanCount,
         verificationPassed: this.state.verificationPassed,
         tasks: this.state.tasks.map(t => ({
           id: t.id,
@@ -1528,37 +1339,7 @@ class Autopilot {
             break;
           }
 
-          // Replanner запускается ТОЛЬКО при BLOCKED
-          if (this.state.hasBlockedTask() && this.state.replanCount < this.state.maxReplans) {
-            const blockedTask = this.state.getBlockedTask();
-            
-            this.state.transition(PHASE.REPLANNING, (t, m) => this._log(t, m));
-            printStatusBar(this, this.state);
-            log.warn(`🔧 REPLANNING: Task "${blockedTask.description.slice(0, 60)}" BLOCKED`);
 
-            const remaining = this.state.tasks.filter(t => t.status === TASK_STATUS.PENDING);
-            const completed = this.state.tasks.filter(t => t.status === TASK_STATUS.COMPLETED);
-
-            const replacements = await this.replanner.replan(blockedTask, remaining, this.originalGoal, completed);
-
-            if (replacements.length > 0) {
-              blockedTask.status = TASK_STATUS.REPLACED;
-              this.state.tasks.push(...replacements);
-              this.state.replanCount++;
-              this.state.resetReplanFailures();
-              this._log("replan", `Generated ${replacements.length} replacement tasks`);
-              log.ok(`Replan: ${replacements.length} new tasks added`);
-            } else {
-              this.state.replanCount++;
-              const shouldBlock = this.state.recordReplanFailure();
-              this._log("replan_failed", "No replacement tasks generated");
-              
-              if (shouldBlock) {
-                finalReason = `${ERROR}✗ Replan failed ${this.state.maxConsecutiveReplanFailures} times consecutively — blocked${C.reset}`;
-                break;
-              }
-            }
-          }
 
           const pendingTask = this.state.getNextPendingTask();
           if (!pendingTask) {
@@ -1587,19 +1368,8 @@ class Autopilot {
 
           if (execResult.status === TASK_STATUS.COMPLETED) {
             log.ok(`  Task complete: ${pendingTask.description.slice(0, 60)}`);
-            this.state.stallCounter = 0;
-          } else if (execResult.status === TASK_STATUS.PARTIAL) {
-            log.warn(`  Task partial: ${pendingTask.description.slice(0, 60)} (progress made, continuing)`);
-            // PARTIAL не триггерит replanner — продолжаем
-          } else if (execResult.status === TASK_STATUS.BLOCKED) {
-            log.err(`  Task blocked: ${pendingTask.description.slice(0, 60)}`);
-            this.state.stallCounter++;
-          }
-
-          if (this.state.stallCounter >= this.state.maxStalls) {
-            finalReason = `${WARNING}▲ Stalled — ${this.state.maxStalls} consecutive blocks${C.reset}`;
-            this._log("stall", `Max stalls ${this.state.maxStalls}`);
-            break;
+          } else if (execResult.status === TASK_STATUS.FAILED) {
+            log.err(`  Task failed: ${pendingTask.description.slice(0, 60)}`);
           }
 
           if (this.errors >= this.maxErrors) {
@@ -1668,11 +1438,8 @@ class Autopilot {
       compressions: this.contextManager.compressions,
       phase: this.state.phase,
       tasksCompleted: this.state.completedCount(),
-      tasksPartial: this.state.partialCount(),
-      tasksBlocked: this.state.blockedCount(),
-      tasksReplaced: this.state.replacedCount(),
+      tasksFailed: this.state.failedCount(),
       tasksTotal: this.state.tasks.length,
-      replans: this.state.replanCount,
       verificationPassed: this.state.verificationPassed,
     };
   }
@@ -1683,7 +1450,6 @@ export {
   AutopilotState,
   Planner,
   Executor,
-  Replanner,
   Verifier,
   ContextManager,
   DiffTracker,
