@@ -51,11 +51,6 @@ const TOOL_OUTCOME = {
   FAILURE: "failure",
 };
 
-const COMPLEXITY_MODE = {
-  DIRECT: "direct",
-  PLANNED: "planned"
-};
-
 const PHASE_ICONS = {
   [PHASE.PLANNING]:     "📋",
   [PHASE.EXECUTION]:    "⚡",
@@ -80,9 +75,7 @@ Given a task description, you MUST output a JSON object with this exact structur
 {
   "tasks": [
     {
-      "description": "Concise description of what to do (one action per task)",
-      "targetFiles": ["file1.js", "file2.py"],
-      "successCriteria": "Clear condition that proves task completion"
+      "description": "Concise description of what to do (one action per task)"
     }
   ]
 }
@@ -90,8 +83,6 @@ Given a task description, you MUST output a JSON object with this exact structur
 RULES:
 - Each task must be a single, atomic action.
 - Order tasks logically (dependencies first).
-- targetFiles MUST be populated with the main files this task will modify.
-- successCriteria MUST be specific and verifiable.
 - Do NOT include any text outside the JSON.
 - Do NOT use markdown code fences around the JSON.
 - The JSON must be valid and parseable.
@@ -235,155 +226,6 @@ async function parseStructuredResponse(rawResponse, cfg, logFn, maxRetries = 3, 
   return null;
 }
 
-function extractTargetFilesFromDescription(description) {
-  const files = [];
-  const filePattern = /(?:[\w\/-]+\.(?:js|ts|jsx|tsx|py|go|rs|json|html|css|md))/g;
-  const matches = description.match(filePattern);
-  if (matches) files.push(...matches);
-  
-  const lowerDesc = description.toLowerCase();
-  if (lowerDesc.includes("api") && !files.some(f => f.includes("api"))) {
-    if (lowerDesc.includes(".js")) files.push("api.js");
-    else if (lowerDesc.includes(".py")) files.push("api.py");
-    else files.push("api");
-  }
-  
-  if (lowerDesc.includes("config") && !files.some(f => f.includes("config"))) {
-    if (lowerDesc.includes(".js")) files.push("config.js");
-    else if (lowerDesc.includes(".json")) files.push("config.json");
-    else files.push("config");
-  }
-  
-  if (lowerDesc.includes("readme") && !files.some(f => f.includes("readme"))) {
-    files.push("README.md");
-  }
-  
-  return [...new Set(files)];
-}
-
-function extractSuccessCriteriaFromDescription(description) {
-  const lowerDesc = description.toLowerCase();
-  
-  if (lowerDesc.includes("add flag") || lowerDesc.includes("--version")) {
-    return "Command responds with version information";
-  }
-  if (lowerDesc.includes("fix bug") || lowerDesc.includes("fix error")) {
-    return "Error is resolved and functionality works correctly";
-  }
-  if (lowerDesc.includes("rename")) {
-    return "File/function is renamed successfully";
-  }
-  if (lowerDesc.includes("refactor")) {
-    return "Code is restructured without breaking existing functionality";
-  }
-  if (lowerDesc.includes("test")) {
-    return "All tests pass successfully";
-  }
-  return "Task completed successfully with verifiable results";
-}
-
-function estimateComplexity(taskDescription) {
-  const lower = taskDescription.toLowerCase();
-  
-  const complexKeywords = [
-    'refactor', 'architecture', 'redesign', 'rewrite', 'migrate',
-    'plugin system', 'modular', 'restructure', 'overhaul',
-    'implement', 'integrate', 'database', 'api gateway', 'microservice'
-  ];
-  
-  const simpleKeywords = [
-    'add flag', 'fix bug', 'rename', 'delete', 'update version',
-    'bump', 'patch', 'typo', 'comment', 'log', 'console'
-  ];
-  
-  const isComplex = complexKeywords.some(kw => lower.includes(kw));
-  const isSimple = simpleKeywords.some(kw => lower.includes(kw));
-  
-  if (isSimple) return { mode: COMPLEXITY_MODE.DIRECT, suggestedMaxTasks: 5 };
-  if (isComplex) return { mode: COMPLEXITY_MODE.PLANNED, suggestedMaxTasks: 20 };
-  
-  const wordCount = taskDescription.split(/\s+/).length;
-  if (wordCount < 15) return { mode: COMPLEXITY_MODE.DIRECT, suggestedMaxTasks: 7 };
-  
-  return { mode: COMPLEXITY_MODE.PLANNED, suggestedMaxTasks: 15 };
-}
-
-function calculateRelevanceScore(taskDescription, targetFile) {
-  if (!taskDescription || !targetFile) return 0;
-  
-  const taskLower = taskDescription.toLowerCase();
-  const fileLower = targetFile.toLowerCase();
-  const fileName = path.basename(fileLower);
-  const fileNameWithoutExt = fileName.replace(/\.[^/.]+$/, "");
-  
-  let score = 0;
-  if (taskLower.includes(fileNameWithoutExt)) score += 0.5;
-  if (taskLower.includes(fileName)) score += 0.3;
-  
-  const taskWords = taskLower.split(/[\s_\-./]+/);
-  const fileWords = fileLower.split(/[\s_\-./]+/);
-  const commonWords = taskWords.filter(word => word.length > 2 && fileWords.includes(word));
-  score += commonWords.length * 0.1;
-  
-  const extensions = {
-    '.js': ['javascript', 'node', 'script'],
-    '.py': ['python', 'script'],
-    '.go': ['golang'],
-    '.rs': ['rust'],
-    '.ts': ['typescript'],
-    '.json': ['config', 'configuration'],
-    '.html': ['html', 'web'],
-    '.css': ['style', 'stylesheet'],
-    '.md': ['documentation', 'doc', 'readme']
-  };
-  
-  const ext = path.extname(fileLower);
-  if (extensions[ext]) {
-    const extKeywords = extensions[ext];
-    if (extKeywords.some(kw => taskLower.includes(kw))) score += 0.2;
-  }
-  
-  const pathPatterns = {
-    'api': ['api', 'endpoint', 'route'],
-    'config': ['config', 'configuration', 'setting'],
-    'test': ['test', 'spec'],
-    'util': ['util', 'helper', 'common'],
-    'model': ['model', 'schema', 'entity'],
-    'controller': ['controller', 'handler'],
-    'service': ['service', 'business'],
-    'repository': ['repository', 'dao', 'data']
-  };
-  
-  for (const [pattern, keywords] of Object.entries(pathPatterns)) {
-    if (fileLower.includes(pattern) && keywords.some(kw => taskLower.includes(kw))) {
-      score += 0.25;
-      break;
-    }
-  }
-  
-  return Math.min(score, 1.0);
-}
-
-function isRelevantFileChange(taskDescription, targetFiles, actualFile) {
-  if (!targetFiles || targetFiles.length === 0) return true;
-  
-  const score = calculateRelevanceScore(taskDescription, actualFile);
-  const isExplicitMatch = targetFiles.some(target => 
-    actualFile.includes(target) || target.includes(actualFile)
-  );
-  
-  if (isExplicitMatch) return true;
-  if (score >= 0.4) {
-    log.dim(`File ${actualFile} has relevance score ${score.toFixed(2)} for task: ${taskDescription.slice(0, 50)}`);
-    return true;
-  }
-  
-  log.warn(`⚠️  File ${actualFile} is not relevant to task: ${taskDescription.slice(0, 50)} (score: ${score.toFixed(2)})`);
-  return false;
-}
-
-
-
 class AutopilotState {
   constructor() {
     this.phase = PHASE.PLANNING;
@@ -409,8 +251,6 @@ class AutopilotState {
     );
   }
 
-
-
   getNextPendingTask() {
     return this.tasks.find(t => t.status === TASK_STATUS.PENDING) || null;
   }
@@ -419,8 +259,6 @@ class AutopilotState {
     return this.tasks.filter(t => t.status === TASK_STATUS.COMPLETED).length;
   }
 
-
-
   failedCount() {
     return this.tasks.filter(t => t.status === TASK_STATUS.FAILED).length;
   }
@@ -428,8 +266,6 @@ class AutopilotState {
   pendingCount() {
     return this.tasks.filter(t => t.status === TASK_STATUS.PENDING).length;
   }
-
-
 
 }
 
@@ -675,7 +511,7 @@ function evaluateToolOutcome(name, result, hasChanges = false) {
   return TOOL_OUTCOME.SUCCESS;
 }
 
-async function executeToolTracked(name, args, cfg, tracker, recovery, iteration, taskContext = null) {
+async function executeToolTracked(name, args, cfg, tracker, recovery, iteration) {
   const { getSandbox } = await import("./security/sandbox.js");
   const sandbox = getSandbox();
   const validation = sandbox.validate(name, args);
@@ -686,16 +522,6 @@ async function executeToolTracked(name, args, cfg, tracker, recovery, iteration,
   let changed = false;
   
   if ((name === "write_file" || name === "patch_file") && args.path) {
-    if (taskContext && taskContext.targetFiles && taskContext.targetFiles.length > 0) {
-      const isRelevant = isRelevantFileChange(taskContext.description, taskContext.targetFiles, args.path);
-      if (!isRelevant) {
-        return { 
-          result: `❌ RELEVANCE BLOCKED: Task "${taskContext.description.slice(0, 50)}" target files: ${taskContext.targetFiles.join(", ")}. Attempted to modify ${args.path} which is not relevant.`, 
-          outcome: TOOL_OUTCOME.FAILURE,
-          changed: false
-        };
-      }
-    }
     tracker.snapshotFile(args.path);
   }
   if (name === "run_shell" && args.cmd) {
@@ -802,30 +628,13 @@ class Planner {
 
   _parsePlan(parsed, originalTask) {
     const tasks = (parsed.tasks || []).map((t, i) => {
-      let targetFiles = t.targetFiles || [];
-      let successCriteria = t.successCriteria || "";
-      
-      if (targetFiles.length === 0) {
-        targetFiles = extractTargetFilesFromDescription(t.description || String(t));
-      }
-      
-      if (targetFiles.length === 0 && originalTask) {
-        targetFiles = extractTargetFilesFromDescription(originalTask);
-      }
-      
-      if (!successCriteria) {
-        successCriteria = extractSuccessCriteriaFromDescription(t.description || String(t));
-      }
-      
       return {
         id: `task-${i + 1}`,
         description: t.description || String(t),
         status: TASK_STATUS.PENDING,
         result: null,
         attempts: 0,
-        maxAttempts: 10,
-        successCriteria: successCriteria,
-        targetFiles: targetFiles
+        maxAttempts: 10
       };
     });
     return tasks;
@@ -930,13 +739,8 @@ class Executor {
           printToolExecution(name, args, 0, 1);
           this.logFn("tool_call", `${name}: ${JSON.stringify(args).slice(0, 300)}`);
 
-          const taskContext = {
-            description: task.description,
-            targetFiles: task.targetFiles || []
-          };
-
           const { result, outcome, changed } = await executeToolTracked(
-            name, args, this.cfg, this.tracker, this.recovery, attemptNumber, taskContext
+            name, args, this.cfg, this.tracker, this.recovery, attemptNumber
           );
 
           if (this.cfg.autopilot?.verbose !== false) {
@@ -990,8 +794,6 @@ class Executor {
     return { completed: false, reason: `No completion after ${maxLocalIterations} iterations`, messages: executionMessages };
   }
 }
-
-
 
 class Verifier {
   constructor() {
@@ -1209,9 +1011,7 @@ class Autopilot {
         
         const desc = t.description.length > 80 ? t.description.slice(0, 77) + "…" : t.description;
         lines.push(`  ${icon} ${TEXT_DIM}${desc}${C.reset}`);
-        if (t.targetFiles && t.targetFiles.length > 0) {
-          lines.push(`     ${MUTED}→ files: ${t.targetFiles.join(", ")}${C.reset}`);
-        }
+
       }
     }
 
@@ -1243,8 +1043,6 @@ class Autopilot {
           status: t.status,
           attempts: t.attempts,
           maxAttempts: t.maxAttempts,
-          targetFiles: t.targetFiles,
-          successCriteria: t.successCriteria,
           result: (t.result || "").slice(0, 500),
         })),
         changes: {
@@ -1335,8 +1133,6 @@ class Autopilot {
             this._log("all_tasks_complete", `All tasks completed or replaced`);
             break;
           }
-
-
 
           const pendingTask = this.state.getNextPendingTask();
           if (!pendingTask) {
@@ -1456,12 +1252,6 @@ export {
   TOOL_OUTCOME,
   AUTOPILOT_VERSION,
   detectProjectType,
-  estimateComplexity,
   parseStructuredResponse,
   extractFirstValidJson,
-  extractTargetFilesFromDescription,
-  extractSuccessCriteriaFromDescription,
-  calculateRelevanceScore,
-  isRelevantFileChange,
-  COMPLEXITY_MODE,
 };
