@@ -34,7 +34,7 @@ const AUTOPILOT_VERSION = getAutopilotVersion();
 const PHASE = {
   PLANNING:      "planning",
   EXECUTION:     "execution",
-  REPLANNING:    "replanning",
+  
   VERIFICATION:  "verification",
   COMPLETE:      "complete",
   FAILED:        "failed",
