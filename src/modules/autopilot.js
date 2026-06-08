@@ -34,7 +34,6 @@ const AUTOPILOT_VERSION = getAutopilotVersion();
 const PHASE = {
   PLANNING:      "planning",
   EXECUTION:     "execution",
-  
   VERIFICATION:  "verification",
   COMPLETE:      "complete",
   FAILED:        "failed",
@@ -117,8 +116,6 @@ CWD: ${process.cwd()}
 Time: ${new Date().toISOString()}
 `;
 }
-
-
 
 function extractFirstValidJson(text) {
   if (!text || typeof text !== "string") return null;
